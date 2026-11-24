@@ -1,0 +1,4 @@
+# Настройки pnpm для проекта (pnpm 11+ читает их отсюда, а не из package.json).
+# esbuild нужен Vite/Vitest — разрешаем ему выполнить install-скрипт.
+onlyBuiltDependencies:
+  - esbuild

@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-ssr
+coverage
+*.local
+.DS_Store
+.vite
+*.log
+
+# Инструменты скриншотов (Chrome DevTools Protocol)
+.chrome-cdp/
+.chrome-profile/
+.chrome-shots/
+.dom-dump.html

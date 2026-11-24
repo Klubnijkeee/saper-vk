@@ -1,0 +1,874 @@
+/*
+ * Дизайн-система «Сапёр: Магазин».
+ * Тёмная тема для мобильного веб-вью ВКонтакте: один экран, крупные тапы,
+ * safe-area, все анимации на CSS (без библиотек и canvas).
+ */
+
+/* ── Токены ─────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: dark;
+
+  /* Фон: не «чёрный квадрат», а мягкий градиент (ТЗ, п.5) */
+  --bg-top: #1a1a1a;
+  --bg-mid: #121212;
+  --bg-bottom: #0e0e0e;
+
+  --surface: #1a1a1a;
+  --surface-2: #232323;
+
+  /* Клетки */
+  --cell-closed: #2a2a2a;
+  --cell-border: #3a3a3a;
+  --cell-open: #1e1e1e;
+  --cell-size: min(32px, calc((100vw - 2 * var(--board-pad) - 8 * var(--board-gap)) / 9));
+  --board-gap: 2px;
+  --board-pad: 8px;
+  --board-width: calc(9 * var(--cell-size) + 8 * var(--board-gap));
+  --statusbar-text: #b0b0b0;
+
+  /* Акценты */
+  --accent: #3b7dff;
+  --accent-dark: #2f6ae0;
+  --accent-light: #4a86ff;
+  --danger: #ff5a5f;
+  --danger-dark: #8c1d1d;
+  --gold: #ffd166;
+
+  --text: #f2f3f5;
+  --text-dim: #9b9b9b;
+
+  /* Цифры — классические цвета сапёра */
+  --n1: #4c8dff;
+  --n2: #3ddc84;
+  --n3: #ff5a5f;
+  --n4: #a86bff;
+  --n5: #ff9f43;
+  --n6: #e6e6e6;
+}
+
+/* ── База ───────────────────────────────────────────────────────────────── */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-mid);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ── Каркас экрана ──────────────────────────────────────────────────────── */
+
+.app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 45%, var(--bg-bottom) 100%);
+}
+
+.app__main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px var(--board-pad);
+  overflow: auto;
+  /* Поле не должно «прыгать» при тряске за пределы экрана */
+  overscroll-behavior: contain;
+}
+
+/* Поле и строка статуса центрируются как одна группа */
+.board-area {
+  margin-top: auto;
+  margin-bottom: 10px;
+  padding: 6px;
+}
+
+/* ── Строка статуса ─────────────────────────────────────────────────────── */
+
+.statusbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  width: var(--board-width);
+  height: 28px;
+  margin-bottom: auto;
+  padding: 0 10px;
+  background: var(--surface);
+  border-radius: 8px;
+  box-shadow: 0 -2px 8px rgb(0 0 0 / 35%), inset 0 1px 0 rgb(255 255 255 / 5%);
+  font-size: 12px;
+  color: var(--statusbar-text);
+}
+
+.statusbar__item {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.statusbar__label {
+  color: var(--statusbar-text);
+}
+
+.statusbar__value {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar__value.is-bump {
+  animation: coin-bump 0.42s ease-out;
+}
+
+/* ── TopBar ─────────────────────────────────────────────────────────────── */
+
+.topbar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: calc(48px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 12px 0;
+  background: rgb(26 26 26 / 92%);
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
+  backdrop-filter: blur(14px);
+}
+
+.topbar__icon-btn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: rgb(255 255 255 / 6%);
+  border: 0;
+  border-radius: 10px;
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+
+.topbar__icon-btn:active {
+  background: rgb(255 255 255 / 13%);
+  transform: scale(0.92);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  background: rgb(255 255 255 / 6%);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chip--level {
+  color: var(--text);
+}
+
+/* Рекорд: золото, чтобы не путался с текущим таймером */
+.chip--record {
+  color: var(--gold);
+}
+
+.chip--time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.03em;
+}
+
+/* Распорка: уровень слева, таймер с рекордом справа */
+.topbar__spacer {
+  flex: 1 1 auto;
+}
+
+@keyframes coin-bump {
+  0% {
+    transform: scale(1);
+  }
+
+  35% {
+    background: rgb(255 209 102 / 22%);
+    transform: scale(1.14);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ── Поле ───────────────────────────────────────────────────────────────── */
+
+.board {
+  display: grid;
+  gap: var(--board-gap);
+  user-select: none;
+}
+
+.board--shake {
+  animation: board-shake 0.3s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* Тряска короткая и с малой амплитудой — на телефоне не «укачивает» (ТЗ, п.6) */
+@keyframes board-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  15% {
+    transform: translate3d(-5px, 1px, 0);
+  }
+
+  30% {
+    transform: translate3d(5px, -1px, 0);
+  }
+
+  45% {
+    transform: translate3d(-4px, 0, 0);
+  }
+
+  60% {
+    transform: translate3d(4px, 1px, 0);
+  }
+
+  75% {
+    transform: translate3d(-2px, 0, 0);
+  }
+
+  90% {
+    transform: translate3d(2px, 0, 0);
+  }
+}
+
+/* После проигрыша все раскрытые мины проявляются мягко */
+.board[data-status='lost'] .cell[data-mine='true'] .cell__content {
+  animation: content-in 0.25s ease-out both;
+}
+
+/* ── Клетка ─────────────────────────────────────────────────────────────── */
+
+.cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--cell-size);
+  height: var(--cell-size);
+  padding: 0;
+  color: var(--text);
+  background-color: var(--cell-closed);
+  border: 1px solid var(--cell-border);
+  border-radius: 6px;
+  /* Объёмная «кнопка» + лёгкий верхний блик */
+  box-shadow: 0 2px 0 #1a1a1a, inset 0 1px 0 rgb(255 255 255 / 6%);
+  transition: transform 0.08s ease, background-color 0.12s ease, border-color 0.12s ease;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.cell:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.cell__content {
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+
+/* Открытая клетка — «утопленная» */
+.cell--open {
+  background-color: var(--cell-open);
+  border-color: transparent;
+  box-shadow: inset 0 2px 4px rgb(0 0 0 / 50%);
+  cursor: default;
+}
+
+/* Флажок: белое полотнище на красном */
+.cell--flagged {
+  background-color: #b3261e;
+  border-color: #d2454e;
+  box-shadow: 0 2px 0 #1a1a1a, inset 0 1px 0 rgb(255 255 255 / 18%);
+}
+
+/* Клетка взрыва — обугленная */
+.cell--exploded {
+  background-color: var(--danger-dark);
+  border-color: var(--danger);
+  box-shadow: inset 0 2px 6px rgb(0 0 0 / 60%);
+}
+
+/* Подсказка «Показать мину»: статичный красный тон (виден и при reduced motion) */
+.cell--hinted {
+  background-color: #6b1a1a;
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgb(255 90 95 / 30%), 0 2px 0 #1a1a1a;
+}
+
+/* Цифры: классические цвета сапёра */
+.cell__digit {
+  color: inherit;
+  font-size: calc(var(--cell-size) * 0.56);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell[data-digit='1'] {
+  color: var(--n1);
+}
+
+.cell[data-digit='2'] {
+  color: var(--n2);
+}
+
+.cell[data-digit='3'] {
+  color: var(--n3);
+}
+
+.cell[data-digit='4'] {
+  color: var(--n4);
+}
+
+.cell[data-digit='5'] {
+  color: var(--n5);
+}
+
+.cell[data-digit='6'],
+.cell[data-digit='7'],
+.cell[data-digit='8'] {
+  color: var(--n6);
+}
+
+/* ── Анимации клеток ────────────────────────────────────────────────────── */
+
+/* Волна раскрытия: от «закрытой» к «открытой», scale 1.1 → 1.0 за 0.15 с.
+   `both` + задержка = во время ожидания клетка ещё выглядит закрытой,
+   поэтому каскад читается как волна от точки клика. */
+.cell--anim-wave {
+  animation: wave-in 0.15s ease-out both;
+}
+
+.cell--anim-wave .cell__content {
+  animation: content-in 0.15s ease-out both;
+  animation-delay: inherit;
+}
+
+@keyframes wave-in {
+  from {
+    background-color: var(--cell-closed);
+    border-color: var(--cell-border);
+    box-shadow: 0 2px 0 #1a1a1a, inset 0 1px 0 rgb(255 255 255 / 6%);
+    transform: scale(1.1);
+  }
+
+  to {
+    background-color: var(--cell-open);
+    border-color: transparent;
+    box-shadow: inset 0 2px 4px rgb(0 0 0 / 50%);
+    transform: scale(1);
+  }
+}
+
+@keyframes content-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Флажок — «пружинка» */
+.cell--anim-flag {
+  animation: flag-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes flag-pop {
+  0% {
+    transform: scale(0.3) rotate(-22deg);
+  }
+
+  60% {
+    transform: scale(1.12) rotate(4deg);
+  }
+
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* Взрыв: красная вспышка самой клетки (не всего поля) */
+.cell--anim-explode {
+  animation: explode-flash 0.3s ease-out both;
+}
+
+/* Подсказка «Показать мину»: 4 пульса по 0.5 с = 2 секунды.
+   Без fill-mode, чтобы после подсказки клетка вернулась к обычному виду. */
+.cell--anim-hint {
+  animation: hint-pulse 0.5s ease-in-out 4;
+  z-index: 2;
+}
+
+@keyframes hint-pulse {
+  0%,
+  100% {
+    background-color: var(--cell-closed);
+    border-color: var(--cell-border);
+    box-shadow: 0 2px 0 #1a1a1a, inset 0 1px 0 rgb(255 255 255 / 6%);
+  }
+
+  50% {
+    background-color: #a32222;
+    border-color: #ff7a7d;
+    box-shadow: 0 0 0 4px rgb(255 90 95 / 45%), 0 2px 0 #1a1a1a;
+  }
+}
+
+/* Подсказка «Убрать мину»: белый дымок вместо мины */
+.cell--anim-mineRemoved {
+  animation: mine-removed 0.45s ease-out;
+}
+
+.cell--anim-mineRemoved::after {
+  position: absolute;
+  background: radial-gradient(
+    circle,
+    rgb(255 255 255 / 90%) 0%,
+    rgb(255 255 255 / 45%) 45%,
+    rgb(255 255 255 / 0%) 72%
+  );
+  border-radius: 50%;
+  animation: puff 0.5s ease-out both;
+  content: '';
+  inset: -22%;
+  pointer-events: none;
+}
+
+@keyframes mine-removed {
+  0% {
+    transform: scale(1.08);
+  }
+
+  60% {
+    transform: scale(0.96);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes puff {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.3);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+@keyframes explode-flash {
+  0% {
+    background-color: #ff3b3b;
+    border-color: #ff8a8d;
+    box-shadow: 0 0 0 4px rgb(255 59 59 / 40%), inset 0 0 12px rgb(255 255 255 / 40%);
+    transform: scale(1.14);
+  }
+
+  55% {
+    background-color: #d32f2f;
+    transform: scale(1.04);
+  }
+
+  100% {
+    background-color: var(--danger-dark);
+    border-color: var(--danger);
+    box-shadow: inset 0 2px 6px rgb(0 0 0 / 60%);
+    transform: scale(1);
+  }
+}
+
+/* ── Магазин ────────────────────────────────────────────────────────────── */
+
+.shopbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  background: rgb(20 20 20 / 92%);
+  border-top: 1px solid rgb(255 255 255 / 7%);
+  backdrop-filter: blur(14px);
+}
+
+.shop-btn {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 56px;
+  padding: 0 6px;
+  color: #fff;
+  background: linear-gradient(180deg, var(--accent-light), var(--accent-dark));
+  border: 0;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgb(47 106 224 / 32%);
+  transition: transform 0.1s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.shop-btn:active {
+  transform: scale(0.95);
+}
+
+.shop-btn--inactive {
+  color: var(--text-dim);
+  background: #2b2b2b;
+  box-shadow: none;
+}
+
+.shop-btn--inactive:active {
+  transform: scale(0.96);
+}
+
+.shop-btn__row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  overflow: hidden;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.shop-btn__price {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.92;
+}
+
+/* ── Оверлей, модалки, кнопки ───────────────────────────────────────────── */
+
+.overlay {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 70%);
+  inset: 0;
+  backdrop-filter: blur(2px);
+  animation: overlay-in 0.2s ease-out both;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 320px;
+  padding: 22px 18px 18px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 55%);
+  animation: modal-in 0.28s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal__badge {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+}
+
+.modal__badge--success {
+  color: var(--gold);
+  background: rgb(255 209 102 / 14%);
+  box-shadow: 0 0 0 1px rgb(255 209 102 / 28%) inset;
+}
+
+.modal__badge--danger {
+  color: #fff;
+  background: rgb(255 90 95 / 16%);
+  box-shadow: 0 0 0 1px rgb(255 90 95 / 30%) inset;
+}
+
+.modal__title {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.modal__subtitle {
+  margin: 0 0 16px;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+.modal__stats {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.modal__stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  background: rgb(255 255 255 / 5%);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.modal__stat strong {
+  color: var(--text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.modal__stat--bonus strong {
+  color: var(--gold);
+}
+
+.modal__record {
+  margin-left: 6px;
+  color: var(--gold);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.modal__actions {
+  display: grid;
+  gap: 8px;
+}
+
+.btn {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  color: #fff;
+  background: none;
+  border: 0;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: transform 0.08s ease, filter 0.15s ease;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn--primary {
+  background: linear-gradient(180deg, var(--accent-light), var(--accent-dark));
+  box-shadow: 0 6px 18px rgb(59 125 255 / 35%);
+}
+
+.btn--primary:active {
+  filter: brightness(0.95);
+}
+
+.btn--ghost {
+  color: var(--text);
+  background: rgb(255 255 255 / 7%);
+}
+
+.btn--sound {
+  min-height: 40px;
+  margin-top: 10px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ── Конфетти ───────────────────────────────────────────────────────────── */
+
+.confetti {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+  inset: 0;
+}
+
+.confetti__dot {
+  position: absolute;
+  top: -24px;
+  border-radius: 2px;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -24px, 0) rotate(0deg);
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.9;
+    transform: translate3d(var(--confetti-dx), 104vh, 0) rotate(var(--confetti-rot));
+  }
+}
+
+/* ── «Подсмотр» поля после завершения партии ─────────────────────────────── */
+
+.peek-chip {
+  position: fixed;
+  bottom: calc(128px + env(safe-area-inset-bottom));
+  left: 50%;
+  z-index: 25;
+  padding: 11px 18px;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: linear-gradient(180deg, var(--accent-light), var(--accent-dark));
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgb(47 106 224 / 40%);
+  transform: translateX(-50%);
+  /* backwards, а не both: иначе залипший кадр анимации перебьёт :active */
+  animation: toast-in 0.22s ease-out backwards;
+}
+
+.peek-chip:active {
+  transform: translateX(-50%) scale(0.96);
+}
+
+/* ── Тост ───────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  left: 50%;
+  z-index: 30;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: center;
+  background: rgb(38 38 38 / 96%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+  transform: translateX(-50%);
+  animation: toast-in 0.22s ease-out both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ── Доступность: уважаем «уменьшить движение» ──────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* На низких экранах поле скроллится, панели остаются на месте */
+@media (max-height: 560px) {
+  .app__main {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .shop-btn {
+    height: 50px;
+  }
+}
