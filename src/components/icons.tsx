@@ -190,3 +190,204 @@ export function SoundIcon({ size, muted }: IconProps & { readonly muted: boolean
     </Icon>
   );
 }
+
+/** Стрелка вправо — «перейти на экран». */
+export function ChevronRightIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <path
+        d="M9 4.5l7.2 7.5L9 19.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Icon>
+  );
+}
+
+/** Проверка — «выполнено». */
+export function CheckIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <path
+        d="M5 12.8l4.4 4.4L19 7.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Icon>
+  );
+}
+
+/** Замок — тема или достижение ещё закрыты. */
+export function LockIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <path d="M6.4 10.4h11.2v9.2H6.4z" fill="currentColor" />
+      <path
+        d="M8.6 10.4V8.2a3.4 3.4 0 016.8 0v2.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </Icon>
+  );
+}
+
+/** Карта — режим «Прохождение». */
+export function MapIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <path
+        d="M3 6.4l6-2.4 6 2.4 6-2.4v13.6l-6 2.4-6-2.4-6 2.4z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="M9 4v13.6M15 6.4V20" stroke="currentColor" strokeWidth="1.4" />
+    </Icon>
+  );
+}
+
+/** Сетка — сложность «Любитель». */
+export function GridIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <g fill="currentColor">
+        <rect x="3.4" y="3.4" width="7.4" height="7.4" rx="2" />
+        <rect x="13.2" y="3.4" width="7.4" height="7.4" rx="2" opacity="0.55" />
+        <rect x="3.4" y="13.2" width="7.4" height="7.4" rx="2" opacity="0.55" />
+        <rect x="13.2" y="13.2" width="7.4" height="7.4" rx="2" />
+      </g>
+    </Icon>
+  );
+}
+
+/** Корона — сложность «Профессионал». */
+export function CrownIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <path d="M3 8.4l4 3.2 5-6 5 6 4-3.2-1.8 10.4H4.8z" fill="currentColor" />
+    </Icon>
+  );
+}
+
+/** Искра — сложность «Особый». */
+export function SparkIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <path d="M12 2.4l2.2 6.2 6.2 2.2-6.2 2.2L12 19.2l-2.2-6.2L3.6 10.8l6.2-2.2z" fill="currentColor" />
+    </Icon>
+  );
+}
+
+/** Звезда — премиальная валюта и «Новичок». */
+export function StarIcon({ size, filled = true }: IconProps & { readonly filled?: boolean }): ReactElement {
+  return (
+    <Icon size={size}>
+      <path
+        d="M12 3.2l2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </Icon>
+  );
+}
+
+/** График — статистика. */
+export function ChartIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <g fill="currentColor">
+        <rect x="3.6" y="12.6" width="4.2" height="8" rx="1.4" />
+        <rect x="9.9" y="7.6" width="4.2" height="13" rx="1.4" />
+        <rect x="16.2" y="4" width="4.2" height="16.6" rx="1.4" />
+      </g>
+    </Icon>
+  );
+}
+
+/** Палитра — темы оформления. */
+export function PaletteIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <path
+        d="M12 3.4c-4.8 0-8.6 3.6-8.6 8.1 0 4.4 3.4 6.6 6 6.6 1.6 0 2.1-.9 2.1-1.8 0-1.9 1.1-2.6 2.7-2.6h1.9c3 0 5.3-1.6 5.3-4.4 0-3.5-3.7-5.9-9.4-5.9z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <g fill="currentColor">
+        <circle cx="8.2" cy="10.4" r="1.5" />
+        <circle cx="12" cy="7.8" r="1.5" />
+        <circle cx="15.9" cy="10.2" r="1.5" />
+      </g>
+    </Icon>
+  );
+}
+
+/** Шестерёнка — настройки. */
+export function GearIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <path
+        d="M12 8.4a3.6 3.6 0 100 7.2 3.6 3.6 0 000-7.2zm9 3.6l-2-.4a7 7 0 00-.7-1.8l1.2-1.7-1.4-1.4-1.7 1.2a7 7 0 00-1.8-.7l-.4-2h-2l-.4 2a7 7 0 00-1.8.7L6.9 7.7 5.5 9.1l1.2 1.7a7 7 0 00-.7 1.8l-2 .4v2l2 .4a7 7 0 00.7 1.8l-1.2 1.7 1.4 1.4 1.7-1.2a7 7 0 001.8.7l.4 2h2l.4-2a7 7 0 001.8-.7l1.7 1.2 1.4-1.4-1.2-1.7a7 7 0 00.7-1.8l2-.4z"
+        fill="currentColor"
+      />
+    </Icon>
+  );
+}
+
+/** Вопросительный знак — «Как играть». */
+export function QuestionIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.22" />
+      <path
+        d="M9.4 9.4a2.7 2.7 0 015.3.6c0 1.9-2.7 2.2-2.7 4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+      />
+      <circle cx="12" cy="17.2" r="1.3" fill="currentColor" />
+    </Icon>
+  );
+}
+
+/** Вибрация. */
+export function VibrationIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <rect x="8.6" y="4.4" width="6.8" height="15.2" rx="2" fill="currentColor" />
+      <g stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <path d="M5.4 9v6M2.8 10.6v2.8M18.6 9v6M21.2 10.6v2.8" />
+      </g>
+    </Icon>
+  );
+}
+
+/** Часы — время и рекорды. */
+export function ClockIcon({ size }: IconProps): ReactElement {
+  return (
+    <Icon size={size}>
+      <circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" strokeWidth="1.9" />
+      <path
+        d="M12 7.4V12l3.4 2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+      />
+    </Icon>
+  );
+}
+

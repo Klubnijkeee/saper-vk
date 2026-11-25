@@ -1,302 +1,231 @@
 /**
- * Композиция экрана: TopBar, поле, строка статуса, панель магазина, модалки и тост.
+ * Приложение: навигация между экранами и общая обвязка.
  *
- * Вся логика партии — в `useGame`. Здесь только раскладка и реакции на события:
- * какой тост показать, какую модалку открыть, что делать по «Назад».
+ * Своего роутера нет специально: экранов мало, история ВК не нужна,
+ * а лишняя зависимость тут ничего не даёт. Вся логика партии — в `useGame`.
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { initAudio } from './audio/sfx';
-import { Board } from './components/Board';
-import { GameOverModal } from './components/GameOverModal';
-import { PauseModal } from './components/PauseModal';
-import { ShopBar } from './components/ShopBar';
-import { StatusBar } from './components/StatusBar';
 import { Toast } from './components/Toast';
-import { TopBar } from './components/TopBar';
-import { remainingMines } from './game/reveal';
-import { canAfford, findShopItem, hasHintTarget, isShopAvailable } from './game/shop';
-import type { GameState, ShopItemId } from './game/types';
+import { DEV_BRIDGE_ENABLED } from './dev';
+import { isModeId } from './game/modes';
+import { findTheme } from './game/themes';
+import type { ModeId, ScreenId, ThemeId } from './game/types';
 import { useGame } from './game/useGame';
 import { useToast } from './hooks/useToast';
+import { AchievementsScreen } from './screens/AchievementsScreen';
+import { GameScreen } from './screens/GameScreen';
+import { HomeScreen } from './screens/HomeScreen';
+import { HowToPlayScreen } from './screens/HowToPlayScreen';
+import { RecordsScreen } from './screens/RecordsScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
+import { StatsScreen } from './screens/StatsScreen';
+import { ThemesScreen } from './screens/ThemesScreen';
 import { vkPersistence } from './vk/storage';
 
-/**
- * Отладочный мост для dev-сборки: позволяет ручному сценарию (и скрипту
- * скриншотов) довести партию до нужного состояния. В production не существует —
- * ветка вырезается сборщиком по `import.meta.env`.
- */
-interface SaperDevBridge {
-  readonly getState: () => GameState;
-  readonly reveal: (index: number) => void;
-  readonly win: () => void;
-  readonly lose: () => void;
-  readonly pause: () => void;
-  readonly peek: () => void;
-  readonly nextLevel: () => void;
-  readonly toggleSound: () => void;
-  readonly applyHint: (hint: ShopItemId) => void;
+/** Сколько ждать перед показом обучающего экрана: сначала должен прийти прогресс. */
+const TUTORIAL_DELAY_MS = 900;
+
+/** Все экраны — для проверки параметра `?screen=`. */
+const SCREENS: readonly ScreenId[] = [
+  'home',
+  'game',
+  'stats',
+  'achievements',
+  'themes',
+  'records',
+  'settings',
+  'howto',
+];
+
+/** Есть ли сценарий для скриншотов (`?dev=...`). В этом случае стартуем сразу с поля. */
+function devScenario(): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('dev');
 }
 
-declare global {
-  interface Window {
-    __SAPER__?: SaperDevBridge;
+/** Параметры запуска: `?dev=` — сценарий партии, `?screen=` — открыть раздел. */
+function queryParam(name: string): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+/** Стартовый экран: игровое поле для сценариев, иначе — меню (или явно заданный раздел). */
+function initialScreen(): ScreenId {
+  if (devScenario() !== null) return 'game';
+  if (!DEV_BRIDGE_ENABLED) return 'home';
+
+  const requested = queryParam('screen');
+  if (requested !== null && (SCREENS as readonly string[]).includes(requested)) {
+    return requested as ScreenId;
   }
+  return 'home';
 }
 
-/** Мост существует только в dev или в сборке с VITE_DEV_BRIDGE=1 (для скриншотов). */
-const DEV_BRIDGE_ENABLED = import.meta.env.DEV || import.meta.env.VITE_DEV_BRIDGE === '1';
+/** Режим из ссылки: нужен только для скриншотов больших полей. */
+function initialMode(): ModeId | null {
+  if (!DEV_BRIDGE_ENABLED) return null;
+  const requested = queryParam('mode');
+  if (requested === null || !isModeId(requested)) return null;
+  return requested;
+}
 
 export default function App(): ReactElement {
-  const { state, reveal, toggleFlagAt, applyHintAt, reset, nextLevel, pause, resume, toggleSound } =
-    useGame({}, vkPersistence);
+  const {
+    state,
+    reveal,
+    toggleFlagAt,
+    applyHintAt,
+    reset,
+    startMode,
+    nextLevel,
+    pause,
+    resume,
+    toggleSound,
+    toggleVibration,
+    markTutorialSeen,
+    setTheme,
+    buyTheme,
+  } = useGame({}, vkPersistence);
   const { toast, showToast } = useToast();
 
-  /** Игрок закрыл экран результата, чтобы посмотреть поле. */
-  const [peeking, setPeeking] = useState(false);
+  const [screen, setScreen] = useState<ScreenId>(initialScreen);
+  /** Дата для задач дня: обновляем при переходе в меню, чтобы день менялся без перезагрузки. */
+  const [now, setNow] = useState<number>(() => Date.now());
 
-  // Актуальное состояние для колбэков и dev-моста (без пересоздания замыканий).
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const isGameOver = state.status === 'won' || state.status === 'lost';
-  const showResult = isGameOver && !peeking;
-
-  // Новая партия — снова показываем экран результата, когда она закончится.
+  // Отладочный режим: `?mode=professional` открывает большое поле сразу.
   useEffect(() => {
-    if (!isGameOver && peeking) setPeeking(false);
-  }, [isGameOver, peeking]);
+    const mode = initialMode();
+    if (mode !== null) startMode(mode);
+  }, [startMode]);
 
-  const handleBuy = useCallback(
-    (id: ShopItemId): void => {
-      const current = stateRef.current;
-      if (current.paused || current.status === 'won' || current.status === 'lost') return;
+  const openScreen = useCallback((next: ScreenId): void => {
+    setNow(Date.now());
+    setScreen(next);
+  }, []);
 
-      // До первого клика мин ещё нет — подсказывать нечего.
-      if (!isShopAvailable(current)) {
-        showToast('Сначала откройте любую клетку');
-        return;
-      }
+  const backHome = useCallback((): void => {
+    openScreen('home');
+  }, [openScreen]);
 
-      const item = findShopItem(id);
-      if (!canAfford(current.coins, item)) {
-        showToast('Не хватает монет');
-        return;
-      }
-      if (!hasHintTarget(current, id)) {
-        showToast(item.emptyMessage);
-        return;
-      }
-
-      applyHintAt(id);
-      showToast(item.appliedMessage);
-    },
-    [applyHintAt, showToast],
-  );
-
-  const handleCellTap = useCallback(
-    (index: number): void => {
-      if (stateRef.current.paused) return;
-      reveal(index);
-    },
-    [reveal],
-  );
-
-  // Мост для ручной проверки и скриншотов (только dev/preview-сборка).
+  // Оформление: палитра темы лежит в CSS, здесь только переключаем атрибут.
   useEffect(() => {
-    if (!DEV_BRIDGE_ENABLED) return undefined;
+    document.documentElement.dataset['theme'] = state.meta.themeId;
+  }, [state.meta.themeId]);
 
-    const revealAllSafe = (): void => {
-      if (!stateRef.current.minesPlaced) reveal(40);
-      window.setTimeout(() => {
-        for (const cell of stateRef.current.board) {
-          if (!cell.hasMine && cell.state === 'hidden') reveal(cell.index);
-        }
-      }, 60);
-    };
-
-    const revealMine = (): void => {
-      if (!stateRef.current.minesPlaced) reveal(40);
-      window.setTimeout(() => {
-        const mine = stateRef.current.board.find((cell) => cell.hasMine && cell.state === 'hidden');
-        if (mine !== undefined) reveal(mine.index);
-      }, 60);
-    };
-
-    window.__SAPER__ = {
-      getState: () => stateRef.current,
-      reveal,
-      win: revealAllSafe,
-      lose: revealMine,
-      pause,
-      peek: () => {
-        setPeeking(true);
-      },
-      nextLevel,
-      toggleSound,
-      applyHint: applyHintAt,
-    };
-
-    return () => {
-      delete window.__SAPER__;
-    };
-  }, [reveal, pause, nextLevel, toggleSound, applyHintAt]);
-
-  // Сценарии для скриншотов (только dev/preview-сборка):
-  // play | flag | lose | lose-peek | win | win-peek | pause | shop-all
-  // | hint-show | hint-remove | sound-off
+  // Первый запуск: показываем «Как играть», когда прогресс уже загружен.
   useEffect(() => {
-    if (!DEV_BRIDGE_ENABLED) return undefined;
-    const scenario = new URLSearchParams(window.location.search).get('dev');
-    if (scenario === null) return undefined;
-
-    /** Небольшой «реальный» игровой отрезок — чтобы таймер и рекорд были не нулевыми. */
-    const PLAY_MS = 2600;
-
-    const later = (action: () => void, delayMs: number): number =>
-      window.setTimeout(action, delayMs);
-
-    const timer = later(() => {
-      const bridge = window.__SAPER__;
-      if (bridge === undefined) return;
-
-      if (scenario === 'play') bridge.reveal(40);
-
-      if (scenario === 'pause') {
-        bridge.reveal(40);
-        later(() => {
-          bridge.pause();
-        }, 1400);
-      }
-
-      if (scenario === 'flag') {
-        bridge.reveal(40);
-        later(() => {
-          const target = stateRef.current.board.find(
-            (cell) => cell.state === 'hidden' && cell.adjacentMines > 0,
-          );
-          if (target !== undefined) toggleFlagAt(target.index);
-        }, 120);
-      }
-
-      if (scenario === 'lose' || scenario === 'lose-peek') {
-        bridge.reveal(40);
-        later(() => {
-          bridge.lose();
-          if (scenario === 'lose-peek') {
-            later(() => {
-              bridge.peek();
-            }, 700);
-          }
-        }, PLAY_MS);
-      }
-
-      if (scenario === 'win' || scenario === 'win-peek') {
-        bridge.reveal(40);
-        later(() => {
-          bridge.win();
-          if (scenario === 'win-peek') {
-            later(() => {
-              bridge.peek();
-            }, 900);
-          }
-        }, PLAY_MS);
-      }
-
-      // «Богатое» состояние: победа → следующий уровень → ход.
-      // Нужно, чтобы монет хватало на все подсказки сразу.
-      if (scenario === 'shop-all' || scenario === 'hint-show' || scenario === 'hint-remove') {
-        bridge.reveal(40);
-        later(() => {
-          bridge.win();
-          later(() => {
-            bridge.nextLevel();
-            later(() => {
-              bridge.reveal(40);
-              if (scenario === 'hint-show' || scenario === 'hint-remove') {
-                later(() => {
-                  bridge.applyHint(scenario === 'hint-show' ? 'show-mine' : 'remove-mine');
-                }, 1250);
-              }
-            }, 300);
-          }, 350);
-        }, PLAY_MS);
-      }
-
-      if (scenario === 'sound-off') {
-        bridge.reveal(40);
-        later(() => {
-          bridge.toggleSound();
-          later(() => {
-            bridge.pause();
-          }, 150);
-        }, 900);
-      }
-    }, 150);
-
+    if (state.meta.tutorialSeen || devScenario() !== null) return undefined;
+    const timer = window.setTimeout(() => {
+      setScreen((current) => (current === 'home' ? 'howto' : current));
+    }, TUTORIAL_DELAY_MS);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [reveal, toggleFlagAt]);
+  }, [state.meta.tutorialSeen]);
+
+  const handlePlay = useCallback(
+    (mode: ModeId): void => {
+      startMode(mode);
+      openScreen('game');
+    },
+    [startMode, openScreen],
+  );
+
+  const handleThemeBuy = useCallback(
+    (theme: ThemeId): void => {
+      const preset = findTheme(theme);
+      if (stateRef.current.meta.stars < preset.price) {
+        showToast('Не хватает звёзд — открывайте достижения');
+        return;
+      }
+      buyTheme(theme);
+      showToast(`Тема «${preset.title}» открыта`);
+    },
+    [buyTheme, showToast],
+  );
 
   return (
     <div className="app" onPointerDownCapture={initAudio}>
-      <TopBar
-        level={state.level}
-        elapsedMs={state.clock.elapsedMs}
-        bestTime={state.bestTime}
-        paused={state.paused}
-        onBack={pause}
-        onPause={state.paused ? resume : pause}
-      />
-
-      <main className="app__main">
-        <Board state={state} onReveal={handleCellTap} onFlag={toggleFlagAt} />
-        <StatusBar mines={remainingMines(state)} flags={state.flags} coins={state.coins} />
-      </main>
-
-      <ShopBar coins={state.coins} canUse={isShopAvailable(state)} onBuy={handleBuy} />
-
-      {state.paused ? (
-        <PauseModal
-          level={state.level}
+      {screen === 'home' ? (
+        <HomeScreen
+          meta={state.meta}
           coins={state.coins}
-          elapsedMs={state.clock.elapsedMs}
-          bestTime={state.bestTime}
-          soundEnabled={state.soundEnabled}
+          level={state.level}
+          now={now}
+          onPlay={handlePlay}
+          onOpen={openScreen}
+        />
+      ) : null}
+
+      {screen === 'game' ? (
+        <GameScreen
+          state={state}
+          onReveal={reveal}
+          onFlag={toggleFlagAt}
+          onHint={applyHintAt}
+          onPause={pause}
           onResume={resume}
           onRestart={reset}
-          onToggleSound={toggleSound}
-        />
-      ) : null}
-
-      {showResult ? (
-        <GameOverModal
-          status={state.status === 'won' ? 'won' : 'lost'}
-          level={state.level}
-          elapsedMs={state.clock.elapsedMs}
-          bestTime={state.bestTime}
           onNextLevel={nextLevel}
-          onRestart={reset}
-          onDismiss={() => {
-            setPeeking(true);
+          onExit={backHome}
+          onToggleSound={toggleSound}
+          showToast={showToast}
+        />
+      ) : null}
+
+      {screen === 'stats' ? <StatsScreen stats={state.meta.stats} onBack={backHome} /> : null}
+
+      {screen === 'records' ? <RecordsScreen stats={state.meta.stats} onBack={backHome} /> : null}
+
+      {screen === 'achievements' ? (
+        <AchievementsScreen
+          stats={state.meta.stats}
+          level={state.level}
+          achievements={state.meta.achievements}
+          themeId={state.meta.themeId}
+          onBack={backHome}
+        />
+      ) : null}
+
+      {screen === 'themes' ? (
+        <ThemesScreen
+          themeId={state.meta.themeId}
+          unlockedThemes={state.meta.unlockedThemes}
+          stars={state.meta.stars}
+          onBack={backHome}
+          onSelect={setTheme}
+          onBuy={handleThemeBuy}
+        />
+      ) : null}
+
+      {screen === 'settings' ? (
+        <SettingsScreen
+          soundEnabled={state.soundEnabled}
+          vibrationEnabled={state.meta.vibrationEnabled}
+          onBack={backHome}
+          onToggleSound={toggleSound}
+          onToggleVibration={toggleVibration}
+          onOpenHowTo={() => {
+            openScreen('howto');
           }}
         />
       ) : null}
 
-      {isGameOver && peeking ? (
-        <button
-          type="button"
-          className="peek-chip"
-          onClick={() => {
-            setPeeking(false);
+      {screen === 'howto' ? (
+        <HowToPlayScreen
+          onBack={() => {
+            markTutorialSeen();
+            backHome();
           }}
-        >
-          Показать результат
-        </button>
+        />
       ) : null}
 
-      {toast !== null ? <Toast key={toast.id} text={toast.text} /> : null}
+      {toast === null ? null : <Toast key={toast.id} text={toast.text} />}
     </div>
   );
 }

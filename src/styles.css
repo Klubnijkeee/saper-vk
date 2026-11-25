@@ -21,10 +21,17 @@
   --cell-closed: #2a2a2a;
   --cell-border: #3a3a3a;
   --cell-open: #1e1e1e;
-  --cell-size: min(32px, calc((100vw - 2 * var(--board-pad) - 8 * var(--board-gap)) / 9));
   --board-gap: 2px;
   --board-pad: 8px;
-  --board-width: calc(9 * var(--cell-size) + 8 * var(--board-gap));
+
+  /*
+   * Число колонок приходит из игры как --cols (9, 16, 30…).
+   * Сам размер клетки считается на игровом экране (см. `.game`): переменные
+   * с var() вычисляются там, где объявлены, поэтому держать формулу в :root
+   * нельзя — она застыла бы на девяти колонках.
+   */
+  --cols: 9;
+  --app-width: min(100vw, 480px);
   --statusbar-text: #b0b0b0;
 
   /* Акценты */
@@ -114,7 +121,7 @@ button {
   gap: 10px;
   align-items: center;
   justify-content: space-between;
-  width: var(--board-width);
+  width: min(100%, var(--board-width));
   height: 28px;
   margin-bottom: auto;
   padding: 0 10px;
@@ -232,6 +239,7 @@ button {
 
 .board {
   display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell-size));
   gap: var(--board-gap);
   user-select: none;
 }
@@ -871,4 +879,979 @@ button {
   .shop-btn {
     height: 50px;
   }
+}
+
+/* ── Каркас разделов ────────────────────────────────────────────────────── */
+
+/*
+ * Игровой экран и экраны разделов — одна колонка: шапка, прокручиваемое тело.
+ * `min-height: 0` обязателен, иначе прокрутка не появится во flex-колонке.
+ */
+
+.game,
+.screen {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Поле шире экрана (30 колонок) — прокрутка вместо обрезки левого края. */
+.app__main {
+  align-items: safe center;
+}
+
+/*
+ * Размер клетки для конкретного поля: сжимается под ширину экрана, но не
+ * мельче 15 px — дальше включается горизонтальная прокрутка. Потолок 34 px,
+ * чтобы на планшете клетки не выглядели гигантскими.
+ *
+ * Объявлено на игровом экране (а не в :root), потому что читает --cols,
+ * которую игра ставит инлайном именно сюда: строка статуса и поле — соседи
+ * и обе наследуют посчитанные значения.
+ */
+.game {
+  --cell-size: clamp(
+    15px,
+    calc((var(--app-width) - 2 * var(--board-pad) - (var(--cols) - 1) * var(--board-gap)) / var(--cols)),
+    34px
+  );
+  --board-width: calc(var(--cols) * var(--cell-size) + (var(--cols) - 1) * var(--board-gap));
+}
+
+.screen__header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+}
+
+.screen__back {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 0;
+  border-radius: 12px;
+}
+
+.screen__back:active {
+  transform: scale(0.94);
+}
+
+.screen__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.screen__title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+}
+
+.screen__subtitle {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.screen__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 14px calc(22px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ── Хаб ────────────────────────────────────────────────────────────────── */
+
+.hub__top {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 10px;
+}
+
+.hub__title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.hub__subtitle {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+
+.hub__wallet {
+  display: flex;
+  gap: 8px;
+}
+
+.wallet-chip {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  height: 30px;
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+.wallet-chip--star {
+  color: var(--gold);
+}
+
+.hub__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 14px calc(24px + env(safe-area-inset-bottom));
+}
+
+/* Главная карточка: кампания */
+
+.hero {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 14px;
+  color: var(--text);
+  text-align: left;
+  background: linear-gradient(135deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--accent);
+  border-radius: 18px;
+  box-shadow: 0 16px 32px -20px var(--accent), inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+.hero:active {
+  transform: scale(0.99);
+}
+
+.hero__icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  color: #fff;
+  background: linear-gradient(140deg, var(--accent-light), var(--accent-dark));
+  border-radius: 16px;
+}
+
+.hero__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hero__eyebrow {
+  color: var(--accent-light);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero__title {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.hero__subtitle {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.hero__go {
+  margin-left: auto;
+  padding: 9px 15px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* Панели хаба */
+
+.panel {
+  padding: 12px;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
+}
+
+.panel--stats {
+  padding: 10px 12px;
+}
+
+.panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.panel__meta {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* Задачи дня */
+
+.daily {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.daily__item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.daily__check {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: #fff;
+  background: var(--surface-2);
+  border-radius: 6px;
+}
+
+.daily__item.is-done .daily__check {
+  background: var(--accent);
+}
+
+.daily__text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.daily__title {
+  font-size: 13px;
+}
+
+.daily__reward {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.daily__count {
+  grid-column: 2 / -1;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: right;
+}
+
+.daily__item.is-done .daily__count {
+  color: var(--accent-light);
+  font-weight: 700;
+}
+
+/* Шкала прогресса */
+
+.progress {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 9%);
+  border-radius: 999px;
+}
+
+.progress--big {
+  height: 8px;
+  margin-bottom: 8px;
+}
+
+.progress__fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-light));
+  border-radius: inherit;
+  transition: width 0.3s ease;
+}
+
+/* Свободная игра */
+
+.modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  padding: 12px;
+  color: var(--text);
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: 14px;
+}
+
+.mode-card:active {
+  border-color: var(--accent);
+  transform: scale(0.98);
+}
+
+.mode-card__icon {
+  margin-bottom: 2px;
+  color: var(--accent-light);
+}
+
+.mode-card__title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mode-card__subtitle {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.mode-card__record {
+  margin-top: 4px;
+  color: var(--gold);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+/* Полоска со сводкой */
+
+.stat-strip {
+  display: flex;
+  gap: 8px;
+}
+
+.stat-strip__item {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: center;
+}
+
+.stat-strip__item strong {
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+/* Плитки разделов */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  padding: 12px 6px;
+  color: var(--text);
+  background: var(--surface);
+  border: 0;
+  border-radius: 14px;
+}
+
+.tile:active {
+  transform: scale(0.97);
+}
+
+.tile__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--accent-light);
+  background: var(--surface-2);
+  border-radius: 12px;
+}
+
+.tile__label {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.tile__badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: 999px;
+}
+
+.hub__hint {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  margin: 2px 0 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+/* ── Списки и строки ────────────────────────────────────────────────────── */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 0 12px;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  background: var(--surface);
+  border-radius: 14px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--surface);
+}
+
+.row + .row {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+.row__icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--accent-light);
+}
+
+.row__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.row__label {
+  font-size: 14px;
+}
+
+.row__hint {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.row__value {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.row__value--empty {
+  color: var(--text-dim);
+}
+
+.row__action {
+  padding: 7px 13px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 999px;
+}
+
+.section-title {
+  margin: 16px 0 8px;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.empty,
+.note {
+  margin: 4px 0 12px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ── Тумблер ────────────────────────────────────────────────────────────── */
+
+.toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  background: var(--surface-2);
+  border: 0;
+  border-radius: 999px;
+  transition: background 0.2s ease;
+}
+
+.toggle__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
+  transition: transform 0.2s ease;
+}
+
+.toggle.is-on {
+  background: var(--accent);
+}
+
+.toggle.is-on .toggle__knob {
+  transform: translateX(20px);
+}
+
+/* ── Темы ───────────────────────────────────────────────────────────────── */
+
+.themes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.theme__pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  color: var(--text);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: 14px;
+}
+
+.theme.is-active .theme__pick {
+  border-color: var(--accent);
+  box-shadow: 0 10px 24px -18px var(--accent);
+}
+
+.theme__preview {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.theme__cell {
+  height: 26px;
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%);
+}
+
+.theme__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.theme__title {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.theme__subtitle {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.theme__state {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 18px;
+  color: var(--text-dim);
+}
+
+.theme__price {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--gold);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.theme__price.is-short {
+  color: var(--text-dim);
+}
+
+/* ── Достижения ─────────────────────────────────────────────────────────── */
+
+.achievements {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.achievement {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 11px 12px;
+  background: var(--surface);
+  border-radius: 14px;
+}
+
+.achievement__medal {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: 12px;
+}
+
+.achievement.is-unlocked .achievement__medal {
+  color: #1b1405;
+  background: linear-gradient(140deg, var(--gold), #ff9f43);
+}
+
+.achievement__text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.achievement__title {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.achievement__description {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.achievement__reward {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── Инструкция ─────────────────────────────────────────────────────────── */
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: 14px;
+}
+
+.step__number {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(140deg, var(--accent-light), var(--accent-dark));
+  border-radius: 12px;
+}
+
+.step__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step__title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.step__description {
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* ── Режим в верхней панели ─────────────────────────────────────────────── */
+
+.topbar__mode {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.topbar__mode-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.topbar__mode-caption {
+  color: var(--text-dim);
+  font-size: 10.5px;
+}
+
+/* ── Палитры тем ────────────────────────────────────────────────────────── */
+
+/*
+ * Тема меняет только токены, поэтому весь интерфейс перекрашивается сам.
+ * Новая тема = блок ниже + запись в src/game/themes.ts.
+ */
+
+[data-theme='neon'] {
+  --bg-top: #241b4d;
+  --bg-mid: #170f33;
+  --bg-bottom: #0d0820;
+  --surface: #1d1440;
+  --surface-2: #2a1d5c;
+  --cell-closed: #2c1f5e;
+  --cell-border: #6b4bd6;
+  --cell-open: #150e2e;
+  --accent: #ff2e93;
+  --accent-dark: #c9166f;
+  --accent-light: #ff6cb4;
+  --danger: #ff2e93;
+  --gold: #ffd166;
+  --text: #f4f0ff;
+  --text-dim: #a99ed6;
+  --statusbar-text: #b3a8dd;
+  --n1: #57c8ff;
+  --n2: #3dffb0;
+  --n3: #ff5c8a;
+  --n4: #c08bff;
+  --n5: #ffb347;
+  --n6: #f0f0ff;
+}
+
+[data-theme='aurora'] {
+  --bg-top: #0f3b39;
+  --bg-mid: #0a2622;
+  --bg-bottom: #06181a;
+  --surface: #0f2f2c;
+  --surface-2: #164039;
+  --cell-closed: #16403a;
+  --cell-border: #2f7f6b;
+  --cell-open: #0b2a26;
+  --accent: #2fd6a5;
+  --accent-dark: #1ba97f;
+  --accent-light: #6bf0c8;
+  --danger: #ff6b6b;
+  --gold: #ffe08a;
+  --text: #eafff7;
+  --text-dim: #8fc4b5;
+  --statusbar-text: #a3d3c4;
+  --n1: #5ec8ff;
+  --n2: #7dfba8;
+  --n3: #ff8b8b;
+  --n4: #c4a6ff;
+  --n5: #ffc46b;
+  --n6: #eafff7;
+}
+
+[data-theme='sunset'] {
+  --bg-top: #4a2b3c;
+  --bg-mid: #2b1a26;
+  --bg-bottom: #1a0f18;
+  --surface: #2f1d2a;
+  --surface-2: #3d2634;
+  --cell-closed: #432b39;
+  --cell-border: #8a5a6b;
+  --cell-open: #2a1a24;
+  --accent: #ff9f43;
+  --accent-dark: #e07a1f;
+  --accent-light: #ffbe78;
+  --danger: #ff5a7a;
+  --gold: #ffd166;
+  --text: #fff2e8;
+  --text-dim: #c39aa8;
+  --statusbar-text: #cba7b4;
+  --n1: #6fb2ff;
+  --n2: #6fe0a8;
+  --n3: #ff7a8a;
+  --n4: #c79bff;
+  --n5: #ffb347;
+  --n6: #fff2e8;
+}
+
+[data-theme='ocean'] {
+  --bg-top: #123049;
+  --bg-mid: #0b2033;
+  --bg-bottom: #06141f;
+  --surface: #103049;
+  --surface-2: #16405e;
+  --cell-closed: #17415f;
+  --cell-border: #2f7ba8;
+  --cell-open: #0d2739;
+  --accent: #38a3ff;
+  --accent-dark: #1f7fd6;
+  --accent-light: #6cc4ff;
+  --danger: #ff6b6b;
+  --gold: #ffd166;
+  --text: #e8f5ff;
+  --text-dim: #93b6cd;
+  --statusbar-text: #a7c5d8;
+  --n1: #6fc8ff;
+  --n2: #5ee0b0;
+  --n3: #ff8296;
+  --n4: #b79bff;
+  --n5: #ffb347;
+  --n6: #e8f5ff;
+}
+
+[data-theme='frost'] {
+  --bg-top: #2b3a4a;
+  --bg-mid: #1a2530;
+  --bg-bottom: #101820;
+  --surface: #1e2a36;
+  --surface-2: #28394a;
+  --cell-closed: #2b3d4d;
+  --cell-border: #6f9dc0;
+  --cell-open: #18242e;
+  --accent: #9fd8ff;
+  --accent-dark: #6aa8d6;
+  --accent-light: #c9ecff;
+  --danger: #ff7a8a;
+  --gold: #ffe3a3;
+  --text: #f0faff;
+  --text-dim: #9db4c6;
+  --statusbar-text: #b3c8d8;
+  --n1: #7ec8ff;
+  --n2: #7fe6c0;
+  --n3: #ff8fa0;
+  --n4: #c0b0ff;
+  --n5: #ffcf8a;
+  --n6: #f0faff;
+}
+
+/* Светлое поле на тёмной оболочке: цифры становятся тёмными. */
+[data-theme='paper'] {
+  --bg-top: #26262a;
+  --bg-mid: #1c1c20;
+  --bg-bottom: #141416;
+  --surface: #232327;
+  --surface-2: #2d2d33;
+  --cell-closed: #dcdcdc;
+  --cell-border: #f4f4f4;
+  --cell-open: #efefef;
+  --accent: #3b7dff;
+  --accent-dark: #2f6ae0;
+  --accent-light: #6fa0ff;
+  --danger: #e0453f;
+  --gold: #f0a92e;
+  --text: #f4f4f6;
+  --text-dim: #a0a0a8;
+  --statusbar-text: #b4b4bc;
+  --n1: #1f63d6;
+  --n2: #128a52;
+  --n3: #c8352f;
+  --n4: #6b3fd1;
+  --n5: #b1650a;
+  --n6: #3a3a40;
+}
+
+[data-theme='violet'] {
+  --bg-top: #2c1a4d;
+  --bg-mid: #1c1033;
+  --bg-bottom: #120a24;
+  --surface: #241640;
+  --surface-2: #32205c;
+  --cell-closed: #32215e;
+  --cell-border: #7b5ad1;
+  --cell-open: #1a1130;
+  --accent: #a86bff;
+  --accent-dark: #8a4ae0;
+  --accent-light: #c69bff;
+  --danger: #ff5a8a;
+  --gold: #ffd166;
+  --text: #f3ecff;
+  --text-dim: #a89cc9;
+  --statusbar-text: #b6a9d6;
+  --n1: #6fb2ff;
+  --n2: #5ee0b0;
+  --n3: #ff7a9a;
+  --n4: #c9a0ff;
+  --n5: #ffb86b;
+  --n6: #f3ecff;
 }

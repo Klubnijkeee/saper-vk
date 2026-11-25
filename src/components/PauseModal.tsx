@@ -1,6 +1,6 @@
 /**
- * Модалка паузы: «Продолжить» / «Заново», статистика партии и переключатель звука.
- * Пока открыта — часы стоят, поле не принимает ходы.
+ * Модалка паузы: «Продолжить» / «Заново» / «В меню», статистика партии
+ * и переключатель звука. Пока открыта — часы стоят, поле не принимает ходы.
  */
 
 import type { ReactElement } from 'react';
@@ -9,7 +9,8 @@ import { SoundIcon } from './icons';
 import { Modal } from './Modal';
 
 export interface PauseModalProps {
-  readonly level: number;
+  /** «Уровень 3» или «Поле 16×16». */
+  readonly modeLabel: string;
   readonly coins: number;
   readonly elapsedMs: number;
   readonly bestTime: number | null;
@@ -17,10 +18,12 @@ export interface PauseModalProps {
   readonly onResume: () => void;
   readonly onRestart: () => void;
   readonly onToggleSound: () => void;
+  /** Выход в меню — партия остаётся незавершённой. */
+  readonly onExit: () => void;
 }
 
 export function PauseModal({
-  level,
+  modeLabel,
   coins,
   elapsedMs,
   bestTime,
@@ -28,6 +31,7 @@ export function PauseModal({
   onResume,
   onRestart,
   onToggleSound,
+  onExit,
 }: PauseModalProps): ReactElement {
   return (
     <Modal title="Пауза" tone="neutral">
@@ -36,8 +40,8 @@ export function PauseModal({
 
       <div className="modal__stats">
         <div className="modal__stat">
-          <span>Уровень</span>
-          <strong>{level}</strong>
+          <span>Режим</span>
+          <strong>{modeLabel}</strong>
         </div>
         <div className="modal__stat">
           <span>Время</span>
@@ -47,12 +51,12 @@ export function PauseModal({
           <span>Монеты</span>
           <strong>{coins}</strong>
         </div>
-        {bestTime !== null ? (
+        {bestTime === null ? null : (
           <div className="modal__stat">
             <span>Рекорд</span>
             <strong>{formatClock(bestTime)}</strong>
           </div>
-        ) : null}
+        )}
       </div>
 
       <div className="modal__actions">
@@ -61,6 +65,9 @@ export function PauseModal({
         </button>
         <button type="button" className="btn btn--ghost" onClick={onRestart}>
           Заново
+        </button>
+        <button type="button" className="btn btn--ghost" onClick={onExit}>
+          В меню
         </button>
       </div>
 

@@ -24,7 +24,7 @@ const devtoolsUrl = process.argv[4] ?? 'http://127.0.0.1:9222';
 const VIEWPORT = { width: 390, height: 844, deviceScaleFactor: 2, mobile: true };
 
 const SCENARIOS = [
-  { name: '01-start', query: '', waitMs: 700 },
+  { name: '01-start', query: '?dev=start', waitMs: 700 },
   { name: '02-cascade', query: '?dev=play', waitMs: 1000 },
   { name: '03-flag', query: '?dev=flag', waitMs: 1000 },
   { name: '04-boom', query: '?dev=lose', waitMs: 3400 },
@@ -42,6 +42,32 @@ const SCENARIOS = [
   { name: '12-sound-off', query: '?dev=sound-off', waitMs: 1800 },
   // Свежая загрузка страницы: настройка должна подхватиться из хранилища.
   { name: '13-sound-persisted', query: '?dev=pause', waitMs: 2200 },
+  // Разделы приложения: хаб, витрины и инструкция.
+  { name: '30-hub', query: '', waitMs: 700 },
+  { name: '31-themes', query: '?screen=themes', waitMs: 1100 },
+  { name: '32-records', query: '?screen=records', waitMs: 1100 },
+  { name: '33-achievements', query: '?screen=achievements', waitMs: 1100 },
+  { name: '34-stats', query: '?screen=stats', waitMs: 1100 },
+  { name: '35-settings', query: '?screen=settings', waitMs: 1100 },
+  { name: '36-howto', query: '?screen=howto', waitMs: 1100 },
+  // Большие поля: 16×16 и классические 30×16.
+  { name: '37-board-amateur', query: '?dev=play&mode=amateur', waitMs: 1800 },
+  { name: '38-board-professional', query: '?dev=play&mode=professional', waitMs: 1800 },
+  // Низ хаба: плитки разделов (прокручиваем тело экрана вниз).
+  { name: '30b-hub-bottom', query: '', waitMs: 700, scroll: true },
+  // Темы: светлая палитра и неон — проверяем, что клетки и цифры читаются.
+  {
+    name: '39-theme-paper',
+    query: '?dev=play&mode=amateur',
+    waitMs: 1600,
+    storage: { theme: 'paper', themes: '["classic","paper"]' },
+  },
+  {
+    name: '40-theme-neon',
+    query: '?dev=play&mode=amateur',
+    waitMs: 1600,
+    storage: { theme: 'neon', themes: '["classic","neon"]' },
+  },
 ];
 
 const DIAGNOSTICS = `(() => {
@@ -146,11 +172,31 @@ mkdirSync(outDir, { recursive: true });
 // продолжит работать с состоянием из памяти и снова запишет его в хранилище.
 await openPage(`${baseUrl}/`);
 await evaluate('localStorage.clear()');
+// Обучающий экран выключаем: иначе он перекрывает меню через 0.9 с
+// и скриншот хаба получается недетерминированным.
+await evaluate("localStorage.setItem('saper:tutorial', 'true')");
 await openPage(`${baseUrl}/`);
 
 for (const scenario of SCENARIOS) {
+  // Значения в хранилище ставим до перехода: приложение читает их при запуске.
+  if (scenario.storage !== undefined) {
+    const writes = Object.entries(scenario.storage)
+      .map(([key, value]) => `localStorage.setItem('saper:${key}', ${JSON.stringify(value)});`)
+      .join(' ');
+    await evaluate(`(() => { ${writes} })()`);
+  }
+
   await send('Page.navigate', { url: `${baseUrl}/${scenario.query}` });
   await sleep(scenario.waitMs);
+
+  if (scenario.scroll === true) {
+    await evaluate(`(() => {
+      const body = document.querySelector('.screen__body');
+      if (body !== null) body.scrollTop = body.scrollHeight;
+    })()`);
+    await sleep(250);
+  }
+
   await shoot(scenario.name);
 }
 
@@ -160,9 +206,14 @@ for (const scenario of SCENARIOS) {
 // цепочка должна начинаться с 1-го уровня и нуля монет. После очистки
 // перезагружаем страницу — иначе приложение перезапишет хранилище состоянием
 // из памяти.
-await openPage(`${baseUrl}/`);
+//
+// `?dev=start` открывает игровое поле без сценария: приложение стартует
+// с меню, а отладочный мост живёт только на игровом экране.
+const GAME_URL = `${baseUrl}/?dev=start`;
+
+await openPage(GAME_URL);
 await evaluate('localStorage.clear()');
-const fresh = await openPage(`${baseUrl}/`).then(() => shoot('14-progress-start'));
+const fresh = await openPage(GAME_URL).then(() => shoot('14-progress-start'));
 check(fresh.state.level === 1, `уровень после очистки: ${fresh.state.level}`);
 check(fresh.state.coins === 0, `монеты после очистки: ${fresh.state.coins}`);
 
@@ -172,7 +223,7 @@ await sleep(900);
 const afterMove = await shoot('15-coins-after-move');
 check(afterMove.state.coins > 0, `монеты не начислились (${afterMove.state.coins})`);
 
-await openPage(`${baseUrl}/`);
+await openPage(GAME_URL);
 const coinsReload = await shoot('16-coins-after-reload');
 check(
   coinsReload.state.coins === afterMove.state.coins,
@@ -187,7 +238,7 @@ await sleep(3400);
 const won = await shoot('17-win-saved');
 check(won.state.status === 'won', `партия не выиграна (${won.state.status})`);
 
-await openPage(`${baseUrl}/`);
+await openPage(GAME_URL);
 const winReload = await shoot('18-win-after-reload');
 check(winReload.state.level === 2, `уровень не сохранился: ${winReload.state.level}`);
 check(
@@ -212,7 +263,7 @@ check(
 );
 check(spent.state.minesRemoved === 1, `подсказка не применилась (${spent.state.minesRemoved})`);
 
-await openPage(`${baseUrl}/`);
+await openPage(GAME_URL);
 const spendReload = await shoot('20-coins-after-spend-reload');
 check(
   spendReload.state.coins === spent.state.coins,

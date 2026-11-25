@@ -1,8 +1,8 @@
 /**
  * Экран завершения партии: «Взрыв!» или «Победа!».
  *
- * Победа: время, бонус +50 монет, рекорд (с отметкой нового) и переход
- * на следующий уровень. Проигрыш: время и «Заново».
+ * В кампании победа ведёт на следующий уровень, в свободной игре — на новую
+ * партию того же поля. В обоих случаях можно вернуться в меню.
  */
 
 import type { ReactElement } from 'react';
@@ -13,22 +13,28 @@ import { Modal } from './Modal';
 
 export interface GameOverModalProps {
   readonly status: 'won' | 'lost';
-  readonly level: number;
+  /** Кампания или свободная игра — от этого зависят подписи и кнопки. */
+  readonly campaign: boolean;
+  /** «Уровень 3» или «Поле 16×16». */
+  readonly modeLabel: string;
   readonly elapsedMs: number;
   readonly bestTime: number | null;
   readonly onNextLevel: () => void;
   readonly onRestart: () => void;
+  readonly onExit: () => void;
   /** Тап мимо карточки — посмотреть поле. */
   readonly onDismiss: () => void;
 }
 
 export function GameOverModal({
   status,
-  level,
+  campaign,
+  modeLabel,
   elapsedMs,
   bestTime,
   onNextLevel,
   onRestart,
+  onExit,
   onDismiss,
 }: GameOverModalProps): ReactElement {
   const won = status === 'won';
@@ -47,7 +53,7 @@ export function GameOverModal({
 
       <h2 className="modal__title">{won ? 'Победа!' : 'Взрыв!'}</h2>
       <p className="modal__subtitle">
-        {won ? `Уровень ${level} пройден` : 'Мина оказалась под ногами'}
+        {won ? `${modeLabel} пройден` : 'Мина оказалась под ногами'}
       </p>
 
       <div className="modal__stats">
@@ -62,11 +68,11 @@ export function GameOverModal({
           </div>
         ) : (
           <div className="modal__stat">
-            <span>Уровень</span>
-            <strong>{level}</strong>
+            <span>Режим</span>
+            <strong>{modeLabel}</strong>
           </div>
         )}
-        {bestTime !== null ? (
+        {bestTime === null ? null : (
           <div className="modal__stat">
             <span>Рекорд</span>
             <strong>
@@ -74,21 +80,24 @@ export function GameOverModal({
               {isRecord ? <em className="modal__record"> новый</em> : null}
             </strong>
           </div>
-        ) : null}
+        )}
       </div>
 
       <div className="modal__actions">
-        {won ? (
+        {won && campaign ? (
           <button type="button" className="btn btn--primary" onClick={onNextLevel}>
             Следующий уровень
           </button>
         ) : null}
         <button
           type="button"
-          className={`btn ${won ? 'btn--ghost' : 'btn--primary'}`}
+          className={`btn ${won && campaign ? 'btn--ghost' : 'btn--primary'}`}
           onClick={onRestart}
         >
-          Заново
+          {won && campaign ? 'Заново' : 'Ещё раз'}
+        </button>
+        <button type="button" className="btn btn--ghost" onClick={onExit}>
+          В меню
         </button>
       </div>
     </Modal>

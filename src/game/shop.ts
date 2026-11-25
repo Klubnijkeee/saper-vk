@@ -98,7 +98,11 @@ export function applyHint(state: GameState, id: ShopItemId, now: number): GameSt
   if (target === undefined) return state;
 
   // Платим только за реально применённую подсказку.
-  const paid: GameState = { ...state, coins: state.coins - item.price };
+  const paid: GameState = {
+    ...state,
+    coins: state.coins - item.price,
+    hintsUsed: state.hintsUsed + 1,
+  };
 
   if (id === 'show-mine') return applyShowMine(paid, target);
   if (id === 'open-cell') return openSingleCell(paid, target, now);

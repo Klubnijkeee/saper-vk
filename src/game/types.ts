@@ -56,7 +56,7 @@ export interface Mine {
  */
 export type GameStatus = 'idle' | 'playing' | 'won' | 'lost';
 
-/** Конфигурация уровня: размер поля и количество мин. */
+/** Конфигурация поля: размеры и количество мин. */
 export interface LevelConfig {
   readonly rows: number;
   readonly cols: number;
@@ -107,12 +107,133 @@ export type LastEvent =
   /** Подсказка «Убрать мину»: мина исчезла с белым дымком. */
   | { readonly kind: 'mineRemoved'; readonly id: number; readonly index: number };
 
+// ── Режимы и оформление ─────────────────────────────────────────────────────
+
+/**
+ * Режим игры.
+ * `campaign` — прохождение по уровням (сложность растёт), остальные —
+ * свободная игра с фиксированным полем и своими рекордами.
+ */
+export type ModeId = 'campaign' | 'novice' | 'amateur' | 'professional' | 'special';
+
+/** Режим свободной игры: размеры поля и число мин. */
+export interface ModePreset {
+  readonly id: ModeId;
+  readonly title: string;
+  readonly subtitle: string;
+  /** Ключ иконки из components/icons.tsx. */
+  readonly icon: ModeIconId;
+}
+
+/** Идентификаторы иконок режимов. */
+export type ModeIconId = 'map' | 'star' | 'grid' | 'crown' | 'spark';
+
+/** Идентификатор оформления поля. */
+export type ThemeId =
+  | 'classic'
+  | 'neon'
+  | 'aurora'
+  | 'sunset'
+  | 'ocean'
+  | 'frost'
+  | 'paper'
+  | 'violet';
+
+/** Тема оформления: описание для витрины (сами цвета — в styles.css). */
+export interface ThemePreset {
+  readonly id: ThemeId;
+  readonly title: string;
+  readonly subtitle: string;
+  /** Цена в звёздах; 0 — тема доступна с самого начала. */
+  readonly price: number;
+  /** Три цвета для превью-плитки в списке тем. */
+  readonly swatch: readonly [string, string, string];
+}
+
+// ── Мета-прогресс ───────────────────────────────────────────────────────────
+
+/** Результаты по конкретному режиму. */
+export interface ModeStats {
+  readonly played: number;
+  readonly wins: number;
+  /** Лучшее время победы, мс. */
+  readonly bestTimeMs: number | null;
+}
+
+/** Общая статистика игрока. */
+export interface Stats {
+  readonly gamesPlayed: number;
+  readonly wins: number;
+  readonly losses: number;
+  /** Текущая серия побед подряд. */
+  readonly currentStreak: number;
+  /** Лучшая серия побед. */
+  readonly bestStreak: number;
+  readonly cellsOpened: number;
+  readonly flagsPlaced: number;
+  readonly hintsUsed: number;
+  /** Победы без единой подсказки. */
+  readonly cleanWins: number;
+  /** Победы быстрее минуты. */
+  readonly fastWins: number;
+  /** Суммарное время партий, мс. */
+  readonly playTimeMs: number;
+  readonly byMode: Readonly<Record<ModeId, ModeStats>>;
+}
+
+/** Счётчики «за сегодня» — из них считаются задачи дня. */
+export interface DailyCounters {
+  readonly gamesPlayed: number;
+  readonly wins: number;
+  readonly cellsOpened: number;
+  readonly flagsPlaced: number;
+  readonly hintsUsed: number;
+  /** Победы без подсказок. */
+  readonly cleanWins: number;
+  /** Победы быстрее минуты. */
+  readonly fastWins: number;
+}
+
+/** Состояние задач дня: к какой дате относятся счётчики и что уже награждено. */
+export interface DailyState {
+  /** Дата в формате YYYY-MM-DD. */
+  readonly date: string;
+  readonly counters: DailyCounters;
+  /** id задач, за которые звёзды уже начислены. */
+  readonly claimed: readonly string[];
+}
+
+/** Мета-прогресс: всё, что живёт между партиями. */
+export interface MetaState {
+  /** Звёзды — премиальная валюта: достижения, задачи дня, покупка тем. */
+  readonly stars: number;
+  readonly themeId: ThemeId;
+  readonly unlockedThemes: readonly ThemeId[];
+  readonly stats: Stats;
+  /** id открытых достижений. */
+  readonly achievements: readonly string[];
+  readonly daily: DailyState;
+  readonly vibrationEnabled: boolean;
+  /** Показан ли обучающий экран. */
+  readonly tutorialSeen: boolean;
+}
+
+/** Экран приложения. Навигация своя: react-router здесь не нужен. */
+export type ScreenId =
+  | 'home'
+  | 'game'
+  | 'stats'
+  | 'achievements'
+  | 'themes'
+  | 'records'
+  | 'settings'
+  | 'howto';
+
 /**
  * Полное состояние партии и мета-прогресса — единственный источник правды для UI.
- * Коины, уровень и рекорд лежат здесь же, чтобы не было двух источников истины;
- * на Шаг 4 наружу сохраняется подмножество (см. `src/vk/storage.ts`).
  */
 export interface GameState {
+  readonly mode: ModeId;
   readonly level: number;
   readonly config: LevelConfig;
   readonly board: Board;
@@ -127,13 +248,13 @@ export interface GameState {
   readonly explodedIndex: number | null;
   /**
    * Зерно случайности партии. Из него детерминированно выводятся все
-   * «случайные» решения (расстановка мин, позже — выбор клетки магазином).
+   * «случайные» решения (расстановка мин, выбор клетки магазином).
    * Благодаря этому редьюсер остаётся чистой функцией.
    */
   readonly seed: number;
   /** Монеты — зарабатываются за открытые клетки и победы, тратятся в магазине. */
   readonly coins: number;
-  /** Лучшее время прохождения, мс (общее по всем уровням), или `null`. */
+  /** Лучшее время прохождения кампании, мс, или `null`. */
   readonly bestTime: number | null;
   readonly clock: Clock;
   /** Партия на паузе: часы стоят, поле не принимает ходы. */
@@ -155,6 +276,11 @@ export interface GameState {
   readonly moveId: number;
   readonly lastEvent: LastEvent | null;
   readonly soundEnabled: boolean;
+  /** Счётчики текущей партии — уезжают в статистику на её исходе. */
+  readonly cellsOpened: number;
+  readonly flagsPlaced: number;
+  readonly hintsUsed: number;
+  readonly meta: MetaState;
 }
 
 /** Источник случайности: детерминированный в тестах, `Math.random`-based в игре. */
@@ -178,24 +304,35 @@ export interface ShopItem {
 
 /** Параметры новой партии. */
 export interface GameOptions {
+  readonly mode?: ModeId;
   readonly level?: number;
   readonly seed?: number;
   readonly coins?: number;
   readonly bestTime?: number | null;
   readonly soundEnabled?: boolean;
+  readonly meta?: Partial<MetaState>;
 }
 
 /**
  * Прогресс, который переживает перезагрузку страницы.
- * Ровно эти четыре значения лежат в VK Storage (по ТЗ).
+ * Каждое поле лежит в VK Storage под своим ключом; сложные — строкой JSON.
+ * Отсутствующий ключ означает «первый запуск» и заменяется дефолтом.
  */
 export interface StoredProgress {
   readonly coins: number;
-  /** Уровень, с которого начинать следующую сессию. */
+  /** Уровень кампании, с которого начинать следующую сессию. */
   readonly level: number;
-  /** Лучшее время прохождения, мс, или `null`, если рекорда ещё нет. */
+  /** Лучшее время кампании, мс, или `null`. */
   readonly bestTime: number | null;
   readonly soundEnabled: boolean;
+  readonly stars: number;
+  readonly themeId: ThemeId;
+  readonly unlockedThemes: readonly ThemeId[];
+  readonly stats: Stats;
+  readonly achievements: readonly string[];
+  readonly daily: DailyState;
+  readonly vibrationEnabled: boolean;
+  readonly tutorialSeen: boolean;
 }
 
 /**
@@ -213,7 +350,8 @@ export interface ProgressPersistence {
 
 /** Действия стейт-машины игры. */
 export type GameAction =
-  | { readonly type: 'START_LEVEL'; readonly level: number }
+  /** Начать партию в режиме (для кампании — с указанного уровня). */
+  | { readonly type: 'START_MODE'; readonly mode: ModeId; readonly level?: number }
   | { readonly type: 'NEXT_LEVEL' }
   | { readonly type: 'REVEAL'; readonly index: number; readonly now: number }
   | { readonly type: 'TOGGLE_FLAG'; readonly index: number }
@@ -223,6 +361,10 @@ export type GameAction =
   | { readonly type: 'PAUSE'; readonly now: number }
   | { readonly type: 'RESUME'; readonly now: number }
   | { readonly type: 'TOGGLE_SOUND' }
-  /** Применить прогресс, загруженный из хранилища. */
-  | { readonly type: 'HYDRATE'; readonly progress: Partial<StoredProgress> }
+  | { readonly type: 'TOGGLE_VIBRATION' }
+  | { readonly type: 'MARK_TUTORIAL_SEEN' }
+  | { readonly type: 'SET_THEME'; readonly theme: ThemeId }
+  | { readonly type: 'BUY_THEME'; readonly theme: ThemeId }
+  /** Применить прогресс, загруженный из хранилища (`now` — для смены дня). */
+  | { readonly type: 'HYDRATE'; readonly progress: Partial<StoredProgress>; readonly now: number }
   | { readonly type: 'RESET' };

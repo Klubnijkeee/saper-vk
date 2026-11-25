@@ -9,6 +9,7 @@
 
 import { cellAt, countSafeCells, createBoard, isValidIndex, neighborIndices } from './board';
 import { freezeClock, startClock } from './clock';
+import { applyMatchEnd } from './meta';
 import { createRng } from './random';
 import type { Board, Cell, CellState, GameState, LevelConfig, WaveCell } from './types';
 
@@ -121,6 +122,8 @@ function completeOpening(state: GameState, opening: Opening): GameState {
     minesPlaced: true,
     openedSafe,
     coins: state.coins + opening.coinDelta,
+    // Счётчик открытых клеток за партию — уезжает в статистику на её исходе.
+    cellsOpened: state.cellsOpened + opening.cells.length,
     // Часы стартуют на первом открытии.
     clock: startClock(state.clock, opening.now),
     moveId,
@@ -197,6 +200,19 @@ function win(state: GameState, now: number): GameState {
   const elapsedMs = clock.elapsedMs;
   const bestTime = state.bestTime === null ? elapsedMs : Math.min(state.bestTime, elapsedMs);
 
+  // Исход партии уходит в мета-прогресс: статистика, рекорд режима,
+  // счётчики дня, достижения и звёзды за них.
+  const meta = applyMatchEnd(state.meta, {
+    mode: state.mode,
+    won: true,
+    timeMs: elapsedMs,
+    cellsOpened: state.cellsOpened,
+    flagsPlaced: state.flagsPlaced,
+    hintsUsed: state.hintsUsed,
+    level: state.level,
+    now,
+  });
+
   return {
     ...state,
     board,
@@ -206,6 +222,7 @@ function win(state: GameState, now: number): GameState {
     coins: state.coins + WIN_BONUS_COINS,
     bestTime,
     hintedIndex: null,
+    meta,
   };
 }
 
@@ -222,16 +239,31 @@ function lose(state: GameState, board: Board, explodedIndex: number, now: number
     return cell;
   });
 
+  const clock = freezeClock(startClock(state.clock, now), now);
   const moveId = state.moveId + 1;
+
+  // Проигрыш тоже идёт в статистику: серия побед сбрасывается, партия засчитана.
+  const meta = applyMatchEnd(state.meta, {
+    mode: state.mode,
+    won: false,
+    timeMs: clock.elapsedMs,
+    cellsOpened: state.cellsOpened,
+    flagsPlaced: state.flagsPlaced,
+    hintsUsed: state.hintsUsed,
+    level: state.level,
+    now,
+  });
+
   return {
     ...state,
     board: nextBoard,
     status: 'lost',
     minesPlaced: true,
     explodedIndex,
-    clock: freezeClock(startClock(state.clock, now), now),
+    clock,
     moveId,
     hintedIndex: null,
+    meta,
     lastEvent: { kind: 'explode', id: moveId, index: explodedIndex },
   };
 }
@@ -258,6 +290,8 @@ export function toggleFlag(state: GameState, index: number): GameState {
     ...state,
     board,
     flags: state.flags + (nextState === 'flagged' ? 1 : -1),
+    // Считаем только флажки, поставленные игроком (автофлажки на победе — не в счёт).
+    flagsPlaced: state.flagsPlaced + (nextState === 'flagged' ? 1 : 0),
     moveId,
     lastEvent: { kind: 'flag', id: moveId, index, flagged: nextState === 'flagged' },
   };

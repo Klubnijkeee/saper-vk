@@ -71,10 +71,17 @@ describe('progress: что сохраняем', () => {
 describe('progress: сериализация', () => {
   it('прогресс переживает запись и чтение', () => {
     const progress: StoredProgress = {
+      ...DEFAULT_PROGRESS,
       coins: 321,
       level: 7,
       bestTime: 42_500,
       soundEnabled: false,
+      stars: 12,
+      themeId: 'neon',
+      unlockedThemes: ['classic', 'neon'],
+      achievements: ['first-game', 'first-win'],
+      vibrationEnabled: false,
+      tutorialSeen: true,
     };
 
     const raw = progressToRaw(progress);
@@ -97,6 +104,14 @@ describe('progress: сериализация', () => {
       level: 'level',
       bestTime: 'bestTime',
       soundEnabled: 'soundEnabled',
+      stars: 'stars',
+      theme: 'theme',
+      themes: 'themes',
+      stats: 'stats',
+      achievements: 'achievements',
+      daily: 'daily',
+      vibration: 'vibration',
+      tutorial: 'tutorial',
     });
   });
 });

@@ -1,12 +1,17 @@
 /**
- * Игровое поле 9×9.
+ * Игровое поле: сетка любого размера — от 9×9 до 30×16.
  *
  * Компонент «глупый»: получает состояние и колбэки. Его единственная
  * собственная задача — разложить события последнего хода в анимации клеток
  * (волна раскрытия, пружинка флажка, вспышка взрыва) и тряхнуть поле.
+ *
+ * Размер клетки считает CSS: `--cols` задаётся здесь, а формула живёт
+ * в styles.css. Так поле само подстраивается под ширину экрана: на 9×9
+ * клетки крупные, на 30×16 — мелкие, но не меньше порога, после которого
+ * включается горизонтальная прокрутка.
  */
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import type { GameState } from '../game/types';
 import { Cell, cellKey, type CellAnimation } from './Cell';
 
@@ -83,18 +88,13 @@ export function Board({ state, onReveal, onFlag }: BoardProps): ReactElement {
     };
   }, [explodeId]);
 
-  const gridStyle: CSSProperties = {
-    gridTemplateColumns: `repeat(${config.cols}, minmax(0, 1fr))`,
-  };
-
   return (
-    <div className="board-area">
+    <div className="board-area" data-size={config.cols > 16 ? 'small' : 'normal'}>
       <div
         className={`board${shaking ? ' board--shake' : ''}`}
         role="group"
         aria-label={`Игровое поле ${config.rows} на ${config.cols}`}
         data-status={status}
-        style={gridStyle}
       >
         {board.map((cell) => {
           const animation = animations.get(cell.index) ?? null;
@@ -114,3 +114,4 @@ export function Board({ state, onReveal, onFlag }: BoardProps): ReactElement {
     </div>
   );
 }
+

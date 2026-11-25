@@ -1,5 +1,5 @@
 /**
- * Верхняя панель: назад, уровень, рекорд, таймер, пауза — одна строка 48 px.
+ * Верхняя панель игры: режим, рекорд, таймер, пауза и возврат в меню.
  * Монеты живут в строке статуса под полем, чтобы не дублироваться.
  */
 
@@ -8,20 +8,24 @@ import { formatClock } from '../game/clock';
 import { ChevronLeftIcon, PauseIcon, PlayIcon, TrophyIcon } from './icons';
 
 export interface TopBarProps {
-  readonly level: number;
+  /** «Уровень 3» для кампании или «Поле 16×16» для свободной игры. */
+  readonly modeLabel: string;
+  /** Пояснение под режимом: размер поля или число мин. */
+  readonly modeCaption: string;
   readonly elapsedMs: number;
-  /** Лучшее время прохождения; `null` — рекорда ещё нет. */
-  readonly bestTime: number | null;
+  /** Рекорд текущего режима; `null` — ещё нет. */
+  readonly record: number | null;
   readonly paused: boolean;
-  /** «Назад» — возврат в меню (на этом этапе открывает паузу). */
+  /** «Назад» — пауза с выходом в меню. */
   readonly onBack: () => void;
   readonly onPause: () => void;
 }
 
 export function TopBar({
-  level,
+  modeLabel,
+  modeCaption,
   elapsedMs,
-  bestTime,
+  record,
   paused,
   onBack,
   onPause,
@@ -32,16 +36,19 @@ export function TopBar({
         <ChevronLeftIcon size={20} />
       </button>
 
-      <span className="chip chip--level">Ур. {level}</span>
+      <span className="topbar__mode">
+        <span className="topbar__mode-label">{modeLabel}</span>
+        <span className="topbar__mode-caption">{modeCaption}</span>
+      </span>
 
       <span className="topbar__spacer" />
 
-      {bestTime !== null ? (
-        <span className="chip chip--record" title="Лучшее время">
+      {record === null ? null : (
+        <span className="chip chip--record" title="Рекорд режима">
           <TrophyIcon size={13} />
-          {formatClock(bestTime)}
+          {formatClock(record)}
         </span>
-      ) : null}
+      )}
 
       <span className="chip chip--time" aria-label="Время партии">
         {formatClock(elapsedMs)}

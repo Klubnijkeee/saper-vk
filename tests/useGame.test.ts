@@ -118,9 +118,10 @@ describe('useGame: редьюсер', () => {
     expect(reset.clock).toEqual({ startedAt: null, elapsedMs: 0 });
   });
 
-  it('START_LEVEL переключает уровень и сложность', () => {
+  it('START_MODE переключает уровень и сложность', () => {
     const level7 = gameReducer(createInitialState({ level: 1, seed: 42 }), {
-      type: 'START_LEVEL',
+      type: 'START_MODE',
+      mode: 'campaign',
       level: 7,
     });
 
@@ -153,6 +154,7 @@ describe('useGame: редьюсер', () => {
     const hydrated = gameReducer(state, {
       type: 'HYDRATE',
       progress: { coins: 321, level: 5, bestTime: 42_000, soundEnabled: false },
+      now: T0,
     });
 
     // Уровень из хранилища — стартовый: поле создаётся заново под него.
@@ -169,6 +171,7 @@ describe('useGame: редьюсер', () => {
     const again = gameReducer(hydrated, {
       type: 'HYDRATE',
       progress: { coins: 321, level: 5, bestTime: 42_000, soundEnabled: false },
+      now: T0,
     });
     expect(again).toBe(hydrated);
   });
@@ -178,6 +181,7 @@ describe('useGame: редьюсер', () => {
     const hydrated = gameReducer(playing, {
       type: 'HYDRATE',
       progress: { coins: 999, level: 7 },
+      now: T0,
     });
 
     expect(hydrated.level).toBe(playing.level);

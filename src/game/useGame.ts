@@ -6,28 +6,34 @@
  * поэтому редьюсер полностью детерминирован (важно для React StrictMode и тестов).
  *
  * Хук `useGame` — единственное место, где живёт состояние: он владеет таймерами
- * (часы партии, подсветка подсказки), озвучивает события и сохраняет настройки
+ * (часы партии, подсветка подсказки), озвучивает события и сохраняет прогресс
  * через порт `ProgressPersistence` (VK Storage или localStorage — домену всё равно).
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { playExplosion, playHint, playPuff, playReveal, playWin } from '../audio/sfx';
-import { createEmptyBoard, getLevelConfig, normalizeLevel } from './board';
+import { createEmptyBoard, normalizeLevel } from './board';
 import { freezeClock, isClockRunning, resetClock, startClock, tickClock } from './clock';
-import { createSeed } from './random';
+import { buyTheme, rollDailyIfNeeded, setTheme, EMPTY_META } from './meta';
+import { configForMode } from './modes';
 import { isSameProgress, progressOf } from './progress';
+import { createSeed } from './random';
 import { openCell, toggleFlag } from './reveal';
 import { applyHint } from './shop';
 import type {
   GameAction,
   GameOptions,
   GameState,
+  MetaState,
+  ModeId,
   ProgressPersistence,
   ShopItemId,
   StoredProgress,
+  ThemeId,
 } from './types';
 
 export const DEFAULT_LEVEL = 1;
+export const DEFAULT_MODE: ModeId = 'campaign';
 
 /**
  * Как часто пересчитывать часы. Влияет только на своевременность перерисовки
@@ -43,12 +49,20 @@ function assertNever(value: never): never {
   throw new Error(`Необработанное действие: ${JSON.stringify(value)}`);
 }
 
+/** Мета-прогресс с подстановкой недостающих полей (после загрузки из хранилища). */
+function mergeMeta(patch: Partial<MetaState> | undefined): MetaState {
+  if (patch === undefined) return EMPTY_META;
+  return { ...EMPTY_META, ...patch };
+}
+
 /** Новая партия. `seed` можно задать явно — для тестов и «повтора партии». */
 export function createInitialState(options: GameOptions = {}): GameState {
+  const mode = options.mode ?? DEFAULT_MODE;
   const level = normalizeLevel(options.level ?? DEFAULT_LEVEL);
-  const config = getLevelConfig(level);
+  const config = configForMode(mode, level);
 
   return {
+    mode,
     level,
     config,
     board: createEmptyBoard(config),
@@ -68,29 +82,35 @@ export function createInitialState(options: GameOptions = {}): GameState {
     moveId: 0,
     lastEvent: null,
     soundEnabled: options.soundEnabled ?? true,
+    cellsOpened: 0,
+    flagsPlaced: 0,
+    hintsUsed: 0,
+    meta: mergeMeta(options.meta),
   };
 }
 
-/** Новая партия с сохранением мета-прогресса (монеты, рекорд, звук). */
-function carryOver(state: GameState, level: number): GameState {
+/** Новая партия с сохранением мета-прогресса (монеты, рекорд, звёзды, статистика). */
+function carryOver(state: GameState, mode: ModeId, level: number): GameState {
   return createInitialState({
+    mode,
     level,
     coins: state.coins,
     bestTime: state.bestTime,
     soundEnabled: state.soundEnabled,
+    meta: state.meta,
   });
 }
 
-/** Редьюсер партии. */
+/** Редьюсер игры. */
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
-    case 'START_LEVEL':
-      return carryOver(state, action.level);
+    case 'START_MODE':
+      return carryOver(state, action.mode, action.level ?? (action.mode === state.mode ? state.level : DEFAULT_LEVEL));
     case 'NEXT_LEVEL':
-      return carryOver(state, state.level + 1);
+      return carryOver(state, state.mode, state.level + 1);
     case 'RESET':
-      // Новое зерно → новое расположение мин, уровень и прогресс сохраняются.
-      return carryOver(state, state.level);
+      // Новое зерно → новое расположение мин, прогресс и мета сохраняются.
+      return carryOver(state, state.mode, state.level);
     case 'REVEAL':
       return openCell(state, action.index, action.now);
     case 'TOGGLE_FLAG':
@@ -123,6 +143,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case 'TOGGLE_SOUND':
       return { ...state, soundEnabled: !state.soundEnabled };
+    case 'TOGGLE_VIBRATION':
+      return {
+        ...state,
+        meta: { ...state.meta, vibrationEnabled: !state.meta.vibrationEnabled },
+      };
+    case 'MARK_TUTORIAL_SEEN':
+      return state.meta.tutorialSeen ? state : { ...state, meta: { ...state.meta, tutorialSeen: true } };
+    case 'SET_THEME': {
+      const meta = setTheme(state.meta, action.theme);
+      return meta === state.meta ? state : { ...state, meta };
+    }
+    case 'BUY_THEME': {
+      const meta = buyTheme(state.meta, action.theme);
+      return meta === state.meta ? state : { ...state, meta };
+    }
     case 'HYDRATE': {
       const { progress } = action;
       const level = progress.level ?? state.level;
@@ -130,18 +165,44 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const bestTime = progress.bestTime === undefined ? state.bestTime : progress.bestTime;
       const soundEnabled = progress.soundEnabled ?? state.soundEnabled;
 
+      const patch: MetaState = {
+        stars: progress.stars ?? state.meta.stars,
+        themeId: progress.themeId ?? state.meta.themeId,
+        unlockedThemes: progress.unlockedThemes ?? state.meta.unlockedThemes,
+        stats: progress.stats ?? state.meta.stats,
+        achievements: progress.achievements ?? state.meta.achievements,
+        daily: progress.daily ?? state.meta.daily,
+        vibrationEnabled: progress.vibrationEnabled ?? state.meta.vibrationEnabled,
+        tutorialSeen: progress.tutorialSeen ?? state.meta.tutorialSeen,
+      };
+
+      // Если в хранилище ровно то же самое — не создаём новые объекты:
+      // иначе повторный HYDRATE перерисовывал бы всё приложение зря.
+      const metaEqualsState =
+        patch.stars === state.meta.stars &&
+        patch.themeId === state.meta.themeId &&
+        patch.unlockedThemes === state.meta.unlockedThemes &&
+        patch.stats === state.meta.stats &&
+        patch.achievements === state.meta.achievements &&
+        patch.daily === state.meta.daily &&
+        patch.vibrationEnabled === state.meta.vibrationEnabled &&
+        patch.tutorialSeen === state.meta.tutorialSeen;
+
+      const meta = metaEqualsState ? state.meta : rollDailyIfNeeded(patch, action.now);
+
       // Уровень из хранилища применяем только к неначавшейся партии:
       // посреди игры подменять поле нельзя. Новая партия — новый seed.
       const startsFresh = level !== state.level && state.status === 'idle' && state.moveId === 0;
       const next: GameState = startsFresh
-        ? createInitialState({ level, coins, bestTime, soundEnabled })
-        : { ...state, coins, bestTime, soundEnabled };
+        ? createInitialState({ mode: state.mode, level, coins, bestTime, soundEnabled, meta })
+        : { ...state, coins, bestTime, soundEnabled, meta };
 
       const unchanged =
         next.level === state.level &&
         next.coins === state.coins &&
         next.bestTime === state.bestTime &&
-        next.soundEnabled === state.soundEnabled;
+        next.soundEnabled === state.soundEnabled &&
+        next.meta === state.meta;
 
       return unchanged ? state : next;
     }
@@ -157,15 +218,20 @@ export interface UseGameResult {
   readonly toggleFlagAt: (index: number) => void;
   readonly applyHintAt: (hint: ShopItemId) => void;
   readonly reset: () => void;
-  readonly startLevel: (level: number) => void;
+  /** Начать партию в режиме (для кампании — с указанного уровня). */
+  readonly startMode: (mode: ModeId, level?: number) => void;
   readonly nextLevel: () => void;
   readonly pause: () => void;
   readonly resume: () => void;
   readonly toggleSound: () => void;
+  readonly toggleVibration: () => void;
+  readonly markTutorialSeen: () => void;
+  readonly setTheme: (theme: ThemeId) => void;
+  readonly buyTheme: (theme: ThemeId) => void;
 }
 
 /**
- * Состояние партии + действия над ним.
+ * Состояние игры + действия над ним.
  *
  * `persistence` — порт сохранения прогресса. Если он не передан (например, в тестах),
  * игра работает полностью в памяти.
@@ -190,8 +256,6 @@ export function useGame(
   }, [running]);
 
   // Подсветка подсказки «Показать мину» гаснет сама через 2 секунды.
-  // Зависимость — id подсказки, а не индекс клетки: повторная подсказка
-  // на ту же клетку должна перезапустить отсчёт.
   const hintId = state.hintId;
   useEffect(() => {
     if (hintId === 0) return undefined;
@@ -203,18 +267,25 @@ export function useGame(
     };
   }, [hintId]);
 
-  // Звук события хода. Зависимость только от id события: переключение звука
-  // не должно переигрывать уже проигранный звук (значения берём из актуального рендера).
+  // Звук и вибрация события хода. Зависимость только от id события: переключение
+  // настроек не должно переигрывать уже проигранный звук.
   const eventId = state.lastEvent?.id ?? 0;
   const eventKind = state.lastEvent?.kind ?? null;
   const soundEnabled = state.soundEnabled;
+  const vibrationEnabled = state.meta.vibrationEnabled;
   useEffect(() => {
-    if (eventKind === null || !soundEnabled) return;
-    if (eventKind === 'reveal') playReveal();
-    if (eventKind === 'explode') playExplosion();
-    if (eventKind === 'hint') playHint();
-    if (eventKind === 'mineRemoved') playPuff();
-  }, [eventId, eventKind, soundEnabled]);
+    if (eventKind === null) return;
+    if (soundEnabled) {
+      if (eventKind === 'reveal') playReveal();
+      if (eventKind === 'explode') playExplosion();
+      if (eventKind === 'hint') playHint();
+      if (eventKind === 'mineRemoved') playPuff();
+    }
+    // Короткая вибрация на взрыве — если игрок её не выключил в настройках.
+    if (eventKind === 'explode' && vibrationEnabled) {
+      navigator.vibrate?.(40);
+    }
+  }, [eventId, eventKind, soundEnabled, vibrationEnabled]);
 
   // Победа — отдельное событие-переход, а не ход: звук фанфар.
   const previousStatus = useRef(state.status);
@@ -225,14 +296,16 @@ export function useGame(
     if (state.status === 'won' && soundEnabled) playWin();
   }, [state.status, soundEnabled]);
 
-  // Загрузка прогресса при старте: монеты, уровень, рекорд, звук.
+  // Загрузка прогресса при старте.
   useEffect(() => {
     if (persistence === null) return undefined;
     let cancelled = false;
     void persistence
       .loadProgress()
       .then((loaded) => {
-        if (!cancelled && loaded !== null) dispatch({ type: 'HYDRATE', progress: loaded });
+        if (!cancelled && loaded !== null) {
+          dispatch({ type: 'HYDRATE', progress: loaded, now: Date.now() });
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -240,9 +313,8 @@ export function useGame(
     };
   }, [persistence]);
 
-  // Сохранение прогресса при любом изменении: открыл клетку, потратил монеты,
-  // победил, переключил звук. Не ждём конца уровня — игрок может закрыть ВК.
-  // Пишем только когда значения реально изменились (тики часов прогресс не трогают).
+  // Сохранение прогресса при любом изменении. Пишем только когда значения
+  // реально изменились (тики часов прогресс не трогают).
   const savedProgress = useRef<StoredProgress | null>(null);
   useEffect(() => {
     if (persistence === null) return;
@@ -269,8 +341,8 @@ export function useGame(
     dispatch({ type: 'RESET' });
   }, []);
 
-  const startLevel = useCallback((level: number): void => {
-    dispatch({ type: 'START_LEVEL', level });
+  const startMode = useCallback((mode: ModeId, level?: number): void => {
+    dispatch(level === undefined ? { type: 'START_MODE', mode } : { type: 'START_MODE', mode, level });
   }, []);
 
   const nextLevel = useCallback((): void => {
@@ -289,6 +361,22 @@ export function useGame(
     dispatch({ type: 'TOGGLE_SOUND' });
   }, []);
 
+  const toggleVibration = useCallback((): void => {
+    dispatch({ type: 'TOGGLE_VIBRATION' });
+  }, []);
+
+  const markTutorialSeen = useCallback((): void => {
+    dispatch({ type: 'MARK_TUTORIAL_SEEN' });
+  }, []);
+
+  const setThemeById = useCallback((theme: ThemeId): void => {
+    dispatch({ type: 'SET_THEME', theme });
+  }, []);
+
+  const buyThemeById = useCallback((theme: ThemeId): void => {
+    dispatch({ type: 'BUY_THEME', theme });
+  }, []);
+
   return useMemo(
     () => ({
       state,
@@ -296,11 +384,15 @@ export function useGame(
       toggleFlagAt,
       applyHintAt,
       reset,
-      startLevel,
+      startMode,
       nextLevel,
       pause,
       resume,
       toggleSound,
+      toggleVibration,
+      markTutorialSeen,
+      setTheme: setThemeById,
+      buyTheme: buyThemeById,
     }),
     [
       state,
@@ -308,11 +400,15 @@ export function useGame(
       toggleFlagAt,
       applyHintAt,
       reset,
-      startLevel,
+      startMode,
       nextLevel,
       pause,
       resume,
       toggleSound,
+      toggleVibration,
+      markTutorialSeen,
+      setThemeById,
+      buyThemeById,
     ],
   );
 }
