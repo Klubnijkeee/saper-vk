@@ -10,6 +10,8 @@ import {
   averageTimeMs,
   bestTimeFor,
   emptyByMode,
+  parTimeMs,
+  starsForLevel,
   winRate,
 } from '../src/game/stats';
 import { MODES } from '../src/game/modes';
@@ -108,5 +110,39 @@ describe('stats: рекорды и средние', () => {
   it('на пустой статистике нет деления на ноль', () => {
     expect(winRate(EMPTY_STATS)).toBe(0);
     expect(averageTimeMs(EMPTY_STATS)).toBeNull();
+  });
+});
+
+describe('stats: оценка уровня', () => {
+  it('паритет зависит от числа мин', () => {
+    expect(parTimeMs(9)).toBe(45_000);
+    expect(parTimeMs(15)).toBe(75_000);
+    // Совсем маленькие поля не должны быть злыми.
+    expect(parTimeMs(2)).toBe(25_000);
+  });
+
+  it('три звезды — быстро и без подсказок', () => {
+    expect(starsForLevel(10, 40_000, 0)).toBe(3);
+    expect(starsForLevel(10, 10_000, 0)).toBe(3);
+  });
+
+  it('подсказка или лишнее время снимают третью звезду', () => {
+    expect(starsForLevel(10, 40_000, 1)).toBe(2);
+    expect(starsForLevel(10, 90_000, 0)).toBe(2);
+  });
+
+  it('медленно и с подсказками — одна звезда', () => {
+    expect(starsForLevel(10, 200_000, 3)).toBe(1);
+    expect(starsForLevel(10, 500_000, 0)).toBe(1);
+  });
+
+  it('оценка не выходит за диапазон 1..3', () => {
+    for (const time of [0, 1_000, 60_000, 10_000_000]) {
+      for (const hints of [0, 1, 5]) {
+        const stars = starsForLevel(12, time, hints);
+        expect(stars).toBeGreaterThanOrEqual(1);
+        expect(stars).toBeLessThanOrEqual(3);
+      }
+    }
   });
 });

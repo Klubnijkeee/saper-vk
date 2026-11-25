@@ -90,6 +90,12 @@ export const Cell = memo(function Cell({
 
   useEffect(() => clearPress, [clearPress]);
 
+  /** Завершить нажатие: снять таймер и забыть точку старта. */
+  const finishPress = useCallback((): void => {
+    clearPress();
+    pressStart.current = null;
+  }, [clearPress]);
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>): void => {
     if (locked) return;
     if (event.pointerType === 'mouse') {
@@ -104,9 +110,22 @@ export const Cell = memo(function Cell({
     consumed.current = false;
     pressStart.current = { x: event.clientX, y: event.clientY };
     clearPress();
+
+    /*
+     * Страховка на уровне окна: если жест перехватит браузер (выделение текста,
+     * контекстное меню, вызов системы), событие может не дойти до самой клетки.
+     * Тогда таймер удержания остался бы висеть и поставил флажок «сам»,
+     * а клетка — залипнуть в нажатом виде.
+     */
+    window.addEventListener('pointerup', finishPress, { once: true });
+    window.addEventListener('pointercancel', finishPress, { once: true });
+
     pressTimer.current = window.setTimeout(() => {
       pressTimer.current = null;
       consumed.current = true;
+      // Удержание на телефоне запускает выделение текста: гасим его, иначе
+      // браузер остаётся в режиме выделения и перестаёт пропускать тапы.
+      window.getSelection()?.removeAllRanges();
       onFlag(cell.index);
     }, LONG_PRESS_MS);
   };
@@ -122,8 +141,7 @@ export const Cell = memo(function Cell({
   };
 
   const handlePointerEnd = (): void => {
-    clearPress();
-    pressStart.current = null;
+    finishPress();
   };
 
   const isRevealed = cell.state === 'revealed';
@@ -152,12 +170,24 @@ export const Cell = memo(function Cell({
       data-mine={cell.hasMine}
       data-exploded={cell.exploded}
       aria-label={cellLabel(cell)}
-      disabled={locked || isRevealed}
+      /*
+       * `disabled` только на замороженном поле: у отключённой кнопки браузер
+       * не спрашивает нас про контекстное меню, и на телефоне всплывает
+       * выделение текста. Открытые клетки просто помечаем aria-disabled —
+       * повторный тап по ним всё равно ничего не делает (редьюсер вернёт то же
+       * состояние), зато жест остаётся под нашим контролем.
+       */
+      disabled={locked}
+      aria-disabled={locked || isRevealed}
+      draggable={false}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}
       onPointerLeave={handlePointerEnd}
+      onDragStart={(event) => {
+        event.preventDefault();
+      }}
       onClick={() => {
         // Долгое нажатие уже поставило флажок — повторно открывать нельзя.
         if (consumed.current) {

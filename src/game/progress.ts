@@ -35,6 +35,7 @@ export const PROGRESS_KEYS = {
   themes: 'themes',
   stats: 'stats',
   achievements: 'achievements',
+  levelStars: 'levelStars',
   daily: 'daily',
   vibration: 'vibration',
   tutorial: 'tutorial',
@@ -51,6 +52,7 @@ export const DEFAULT_PROGRESS: StoredProgress = {
   unlockedThemes: [DEFAULT_THEME],
   stats: EMPTY_STATS,
   achievements: [],
+  levelStars: {},
   daily: EMPTY_DAILY,
   vibrationEnabled: true,
   tutorialSeen: false,
@@ -59,13 +61,13 @@ export const DEFAULT_PROGRESS: StoredProgress = {
 /**
  * Что записываем по текущему состоянию игры.
  *
- * Уровень после победы сохраняем уже следующим: выиграл 1-й уровень — при
- * следующем запуске начинаем со 2-го. До победы сохраняем текущий уровень.
+ * `level` — докуда игрок дошёл в кампании (см. `MetaState.campaignLevel`),
+ * а не уровень текущей партии: иначе повтор старого уровня откатывал бы прогресс.
  */
 export function progressOf(state: GameState): StoredProgress {
   return {
     coins: state.coins,
-    level: state.status === 'won' ? state.level + 1 : state.level,
+    level: state.meta.campaignLevel,
     bestTime: state.bestTime,
     soundEnabled: state.soundEnabled,
     stars: state.meta.stars,
@@ -73,6 +75,7 @@ export function progressOf(state: GameState): StoredProgress {
     unlockedThemes: state.meta.unlockedThemes,
     stats: state.meta.stats,
     achievements: state.meta.achievements,
+    levelStars: state.meta.levelStars,
     daily: state.meta.daily,
     vibrationEnabled: state.meta.vibrationEnabled,
     tutorialSeen: state.meta.tutorialSeen,
@@ -96,6 +99,7 @@ export function progressToRaw(progress: StoredProgress): Readonly<Record<string,
     [PROGRESS_KEYS.themes]: JSON.stringify(progress.unlockedThemes),
     [PROGRESS_KEYS.stats]: JSON.stringify(progress.stats),
     [PROGRESS_KEYS.achievements]: JSON.stringify(progress.achievements),
+    [PROGRESS_KEYS.levelStars]: JSON.stringify(progress.levelStars),
     [PROGRESS_KEYS.daily]: JSON.stringify(progress.daily),
     [PROGRESS_KEYS.vibration]: progress.vibrationEnabled ? 'true' : 'false',
     [PROGRESS_KEYS.tutorial]: progress.tutorialSeen ? 'true' : 'false',
@@ -114,6 +118,7 @@ export function progressFromRaw(values: ReadonlyMap<string, string>): StoredProg
     unlockedThemes: parseThemes(values.get(PROGRESS_KEYS.themes)),
     stats: parseStats(values.get(PROGRESS_KEYS.stats)),
     achievements: parseIds(values.get(PROGRESS_KEYS.achievements)),
+    levelStars: parseLevelStars(values.get(PROGRESS_KEYS.levelStars)),
     daily: parseDaily(values.get(PROGRESS_KEYS.daily)),
     vibrationEnabled: parseBoolean(values.get(PROGRESS_KEYS.vibration), true),
     tutorialSeen: parseBoolean(values.get(PROGRESS_KEYS.tutorial), false),
@@ -195,6 +200,22 @@ function parseIds(raw: string | undefined): readonly string[] {
   const value = parseJson(raw);
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
+}
+
+/** Оценки уровней: только номера уровней и только 1..3 звезды. */
+function parseLevelStars(raw: string | undefined): Readonly<Record<string, number>> {
+  const value = asRecord(parseJson(raw));
+  if (value === null) return {};
+
+  const result: Record<string, number> = {};
+  for (const [key, stars] of Object.entries(value)) {
+    const level = Number.parseInt(key, 10);
+    if (!Number.isFinite(level) || level < 1 || level > 999) continue;
+    const count = asCount(stars);
+    if (count < 1 || count > 3) continue;
+    result[String(level)] = count;
+  }
+  return result;
 }
 
 function parseModeStats(value: unknown): ModeStats {

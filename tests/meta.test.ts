@@ -6,31 +6,23 @@
 import { describe, expect, it } from 'vitest';
 import { ACHIEVEMENTS } from '../src/game/achievements';
 import { dateKey } from '../src/game/daily';
-import { EMPTY_META, applyMatchEnd, buyTheme, rollDailyIfNeeded, setTheme } from '../src/game/meta';
+import { EMPTY_META, applyMatchEnd, awardLevelStars, buyTheme, rollDailyIfNeeded, setTheme } from '../src/game/meta';
 import { openCell } from '../src/game/reveal';
 import { bestTimeFor } from '../src/game/stats';
 import { DEFAULT_THEME, findTheme } from '../src/game/themes';
 import { createInitialState, gameReducer } from '../src/game/useGame';
 import type { GameState, MetaState } from '../src/game/types';
+import { classicState, winGame } from './helpers';
 
 const T0 = 1_700_000_000_000;
 const CENTER = 40;
 
 /** Идущая партия с безопасным первым ходом. */
 function playingState(seed = 42): GameState {
-  return openCell(createInitialState({ level: 1, seed }), CENTER, T0);
+  return openCell(classicState({ seed }), CENTER, T0);
 }
 
-/** Довести партию до победы. */
-function winGame(state: GameState, now: number): GameState {
-  let current = state;
-  for (const cell of current.board) {
-    if (current.status === 'won') break;
-    if (cell.hasMine) continue;
-    current = openCell(current, cell.index, now);
-  }
-  return current;
-}
+/** Довести партию до победы (реализация — в общих помощниках). */
 
 /** Итог партии по умолчанию. */
 function end(overrides: Partial<Parameters<typeof applyMatchEnd>[1]> = {}) {
@@ -42,6 +34,7 @@ function end(overrides: Partial<Parameters<typeof applyMatchEnd>[1]> = {}) {
     flagsPlaced: 5,
     hintsUsed: 0,
     level: 1,
+    mines: 10,
     now: T0,
     ...overrides,
   };
@@ -100,6 +93,57 @@ describe('meta: исход партии', () => {
   it('rollDailyIfNeeded не трогает состояние в тот же день', () => {
     const meta = applyMatchEnd(EMPTY_META, end());
     expect(rollDailyIfNeeded(meta, T0)).toBe(meta);
+  });
+});
+
+describe('meta: звёзды за уровни кампании', () => {
+  it('быстрая победа без подсказок даёт три звезды', () => {
+    const award = awardLevelStars({}, 3, 10, 30_000, 0);
+
+    expect(award.earned).toBe(3);
+    expect(award.gained).toBe(3);
+    expect(award.levelStars['3']).toBe(3);
+  });
+
+  it('оценка только растёт: повтор на меньшее число звёзд ничего не меняет', () => {
+    const best = awardLevelStars({}, 3, 10, 20_000, 0);
+    const worse = awardLevelStars(best.levelStars, 3, 10, 500_000, 4);
+
+    expect(worse.earned).toBe(3);
+    expect(worse.gained).toBe(0);
+    expect(worse.levelStars).toBe(best.levelStars);
+  });
+
+  it('улучшение оценки добавляет только разницу', () => {
+    const slow = awardLevelStars({}, 2, 10, 300_000, 0);
+    expect(slow.earned).toBe(1);
+
+    const fast = awardLevelStars(slow.levelStars, 2, 10, 30_000, 0);
+    expect(fast.earned).toBe(3);
+    expect(fast.gained).toBe(2);
+  });
+
+  it('в свободной игре уровень не оценивается', () => {
+    const meta = applyMatchEnd(EMPTY_META, end({ mode: 'novice' }));
+    expect(meta.levelStars).toEqual({});
+  });
+
+  it('победа в кампании двигает прогресс и звёзды, поражение — нет', () => {
+    const won = applyMatchEnd(EMPTY_META, end({ level: 4 }));
+    expect(won.campaignLevel).toBe(5);
+    expect(won.levelStars['4']).toBe(3);
+
+    const lost = applyMatchEnd(EMPTY_META, end({ level: 9, won: false }));
+    expect(lost.campaignLevel).toBe(1);
+    expect(lost.levelStars).toEqual({});
+  });
+
+  it('перепрохождение старого уровня не откатывает кампанию', () => {
+    const far = applyMatchEnd(EMPTY_META, end({ level: 9 }));
+    expect(far.campaignLevel).toBe(10);
+
+    const replay = applyMatchEnd(far, end({ level: 2 }));
+    expect(replay.campaignLevel).toBe(10);
   });
 });
 
@@ -178,7 +222,7 @@ describe('meta: связка с редьюсером', () => {
   });
 
   it('покупка темы в редьюсере списывает звёзды', () => {
-    const state = createInitialState({ seed: 1, meta: { stars: 200 } });
+    const state = createInitialState({ mode: 'novice', seed: 1, meta: { stars: 200 } });
     const bought = gameReducer(state, { type: 'BUY_THEME', theme: 'frost' });
 
     expect(bought.meta.themeId).toBe('frost');
@@ -189,7 +233,7 @@ describe('meta: связка с редьюсером', () => {
   });
 
   it('вибрация и обучение переключаются', () => {
-    const state = createInitialState({ seed: 1 });
+    const state = createInitialState({ mode: 'novice', seed: 1 });
 
     expect(state.meta.vibrationEnabled).toBe(true);
     expect(gameReducer(state, { type: 'TOGGLE_VIBRATION' }).meta.vibrationEnabled).toBe(false);

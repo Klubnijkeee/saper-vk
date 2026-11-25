@@ -140,6 +140,39 @@ function completeOpening(state: GameState, opening: Opening): GameState {
 }
 
 /**
+ * Стартовая зона уровня с фигурой.
+ *
+ * Мины на таком уровне расставлены заранее, поэтому «первый клик безопасен»
+ * обеспечивается иначе: игра сама открывает клетку `S` и её окружение.
+ * Часы при этом не запускаются (партия ещё `idle`), монеты не начисляются —
+ * это подарок уровня, а не ход игрока. Волна раскрытия проигрывается та же,
+ * что и при обычном клике.
+ */
+export function openStartZone(state: GameState, index: number): GameState {
+  if (!isValidIndex(index, state.config)) return state;
+
+  const opened = floodFill(state.board, state.config, index);
+  if (opened.size === 0) return state;
+
+  const board = state.board.map((cell) => opened.get(cell.index)?.cell ?? cell);
+  const cells: WaveCell[] = [...opened.entries()].map(([cellIndex, entry]) => ({
+    index: cellIndex,
+    ring: entry.ring,
+  }));
+
+  const moveId = state.moveId + 1;
+  return {
+    ...state,
+    board,
+    status: 'idle',
+    minesPlaced: true,
+    openedSafe: state.openedSafe + opened.size,
+    moveId,
+    lastEvent: { kind: 'reveal', id: moveId, origin: index, cells },
+  };
+}
+
+/**
  * Каскадное открытие: открываем клетку; если у неё нет мин рядом —
  * продолжаем с её соседями.
  *
@@ -210,6 +243,7 @@ function win(state: GameState, now: number): GameState {
     flagsPlaced: state.flagsPlaced,
     hintsUsed: state.hintsUsed,
     level: state.level,
+    mines: state.config.mines,
     now,
   });
 
@@ -251,6 +285,7 @@ function lose(state: GameState, board: Board, explodedIndex: number, now: number
     flagsPlaced: state.flagsPlaced,
     hintsUsed: state.hintsUsed,
     level: state.level,
+    mines: state.config.mines,
     now,
   });
 

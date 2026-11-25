@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cellAt,
+  countSafeCells,
   getLevelConfig,
   minesOf,
   neighborIndices,
@@ -23,17 +24,18 @@ import {
   isShopAvailable,
   SHOP_ITEMS,
 } from '../src/game/shop';
-import { createInitialState, gameReducer } from '../src/game/useGame';
+import { gameReducer } from '../src/game/useGame';
 import type { GameState, LevelConfig, ShopItemId } from '../src/game/types';
+import { CLASSIC_LEVEL, classicState } from './helpers';
 
-const CONFIG: LevelConfig = getLevelConfig(1); // 9×9, 10 мин
+const CONFIG: LevelConfig = getLevelConfig(CLASSIC_LEVEL); // 9×9, 15 мин
 const SEED = 42;
 const CENTER = 40;
 const T0 = 1_700_000_000_000;
 
 /** Партия, в которой сделан первый безопасный ход. Монет по умолчанию хватает на всё. */
 function playingState(coins = 500): GameState {
-  const initial = createInitialState({ level: 1, seed: SEED, coins });
+  const initial = classicState({ seed: SEED, coins });
   return openCell(initial, CENTER, T0);
 }
 
@@ -92,7 +94,7 @@ describe('shop: доступность', () => {
   });
 
   it('магазин работает только в идущей партии', () => {
-    const idle = createInitialState({ level: 1, seed: SEED, coins: 500 });
+    const idle = classicState({ seed: SEED, coins: 500 });
     expect(isShopAvailable(idle)).toBe(false);
     expect(applyHint(idle, 'open-cell', T0)).toBe(idle);
 
@@ -107,7 +109,7 @@ describe('shop: доступность', () => {
   it('не хватает монет — подсказка не применяется и деньги не списываются', () => {
     // Начинаем с нуля: после каскада монет хватает на дешёвые подсказки,
     // но на «Убрать мину» за 100 — нет.
-    const state = openCell(createInitialState({ level: 1, seed: SEED, coins: 0 }), CENTER, T0);
+    const state = openCell(classicState({ seed: SEED, coins: 0 }), CENTER, T0);
     const coins = state.coins;
     expect(canAfford(coins, findShopItem('remove-mine'))).toBe(false);
 
@@ -239,17 +241,17 @@ describe('shop: «Открыть клетку»', () => {
 });
 
 describe('shop: «Убрать мину» — обязательный сценарий Шага 3', () => {
-  it('мина исчезает, цифры пересчитываются, победа — по 72 безопасным клеткам', () => {
+  it('мина исчезает, цифры пересчитываются, победа — по новому порогу', () => {
     const before = playingState();
-    expect(minesOf(before.board)).toHaveLength(CONFIG.mines); // 10
-    expect(safeCellsTotal(before)).toBe(71);
+    expect(minesOf(before.board)).toHaveLength(CONFIG.mines);
+    expect(safeCellsTotal(before)).toBe(countSafeCells(CONFIG));
 
     const removed = applyHint(before, 'remove-mine', T0 + 1000);
 
-    // 1. Мина убрана: 10 → 9, деньги списаны ровно на цену.
+    // 1. Мина убрана: счётчик уменьшился, деньги списаны ровно на цену.
     expect(removed.minesRemoved).toBe(1);
-    expect(remainingMines(removed)).toBe(9);
-    expect(minesOf(removed.board)).toHaveLength(9);
+    expect(remainingMines(removed)).toBe(CONFIG.mines - 1);
+    expect(minesOf(removed.board)).toHaveLength(CONFIG.mines - 1);
     expect(removed.coins).toBe(before.coins - findShopItem('remove-mine').price);
 
     const removedIndex = eventIndex(removed);
@@ -277,15 +279,15 @@ describe('shop: «Убрать мину» — обязательный сцен�
       expect(cell.adjacentMines, `клетка ${cell.index}`).toBe(expected);
     });
 
-    // 3. Безопасных клеток стало 72.
-    expect(safeCellsTotal(removed)).toBe(72);
+    // 3. Безопасных клеток стало на одну больше.
+    expect(safeCellsTotal(removed)).toBe(countSafeCells(CONFIG) + 1);
 
     // 4. Открытие соседа показывает уже новую цифру.
     const opened = openCell(removed, neighbour, T0 + 2000);
     expect(cellAt(opened.board, neighbour).state).toBe('revealed');
     expect(cellAt(opened.board, neighbour).adjacentMines).toBe(digitBefore - 1);
 
-    // 5. Победа наступает при открытых 72 безопасных клетках.
+    // 5. Победа наступает по новому порогу безопасных клеток.
     let state = removed;
     for (const cell of removed.board) {
       if (state.status === 'won') break;
@@ -294,8 +296,8 @@ describe('shop: «Убрать мину» — обязательный сцен�
     }
 
     expect(state.status).toBe('won');
-    expect(state.openedSafe).toBe(72);
-    expect(state.flags).toBe(9);
+    expect(state.openedSafe).toBe(countSafeCells(CONFIG) + 1);
+    expect(state.flags).toBe(CONFIG.mines - 1);
   });
 
   it('снимает флажок с убранной мины', () => {

@@ -14,16 +14,16 @@ import {
   progressToRaw,
 } from '../src/game/progress';
 import { openCell } from '../src/game/reveal';
-import { createInitialState } from '../src/game/useGame';
 import type { GameState, StoredProgress } from '../src/game/types';
+import { CLASSIC_LEVEL, classicState } from './helpers';
 
 const SEED = 42;
 const CENTER = 40;
 const T0 = 1_700_000_000_000;
 
-/** Идущая партия на 3-м уровне с запасом монет. */
+/** Идущая партия на классическом уровне с запасом монет. */
 function playingState(): GameState {
-  return openCell(createInitialState({ level: 3, seed: SEED, coins: 120 }), CENTER, T0);
+  return openCell(classicState({ seed: SEED, coins: 120 }), CENTER, T0);
 }
 
 /** Довести партию до победы. */
@@ -42,7 +42,7 @@ describe('progress: что сохраняем', () => {
     const state = playingState();
     const progress = progressOf(state);
 
-    expect(progress.level).toBe(3);
+    expect(progress.level).toBe(CLASSIC_LEVEL);
     expect(progress.coins).toBe(state.coins);
     expect(progress.bestTime).toBeNull();
     expect(progress.soundEnabled).toBe(true);
@@ -52,14 +52,14 @@ describe('progress: что сохраняем', () => {
     const won = winGame(playingState(), T0 + 30_000);
 
     expect(won.status).toBe('won');
-    expect(won.level).toBe(3);
-    // Выиграл 3-й уровень — при следующем запуске начинаем с 4-го.
-    expect(progressOf(won).level).toBe(4);
+    expect(won.level).toBe(CLASSIC_LEVEL);
+    // Выиграл уровень — при следующем запуске начинаем со следующего.
+    expect(progressOf(won).level).toBe(CLASSIC_LEVEL + 1);
     expect(progressOf(won).bestTime).toBe(30_000);
   });
 
   it('монеты растут по ходу партии и попадают в прогресс', () => {
-    const start = createInitialState({ level: 3, seed: SEED, coins: 120 });
+    const start = classicState({ seed: SEED, coins: 120 });
     const after = openCell(start, CENTER, T0);
 
     expect(progressOf(start).coins).toBe(120);
@@ -109,6 +109,7 @@ describe('progress: сериализация', () => {
       themes: 'themes',
       stats: 'stats',
       achievements: 'achievements',
+      levelStars: 'levelStars',
       daily: 'daily',
       vibration: 'vibration',
       tutorial: 'tutorial',

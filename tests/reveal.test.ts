@@ -5,17 +5,18 @@
 import { describe, expect, it } from 'vitest';
 import { cellAt, countSafeCells, getLevelConfig, neighborIndices } from '../src/game/board';
 import { openCell, toggleFlag, WIN_BONUS_COINS } from '../src/game/reveal';
-import { createInitialState, gameReducer } from '../src/game/useGame';
+import { gameReducer } from '../src/game/useGame';
 import type { Board, GameState, LevelConfig } from '../src/game/types';
+import { CLASSIC_LEVEL, classicState } from './helpers';
 
-const CONFIG: LevelConfig = getLevelConfig(1); // 9×9, 10 мин
+const CONFIG: LevelConfig = getLevelConfig(CLASSIC_LEVEL); // 9×9, 15 мин
 const SEED = 42;
 const CENTER = 40; // row 4, col 4
 const T0 = 1_700_000_000_000;
 
 /** Партия, в которой уже сделан безопасный первый клик (мины расставлены). */
 function startedState(seed: number = SEED): GameState {
-  return openCell(createInitialState({ level: 1, seed }), CENTER, T0);
+  return openCell(classicState({ seed }), CENTER, T0);
 }
 
 /** Первая закрытая клетка без мины — чтобы сделать «обычный» ход. */
@@ -53,7 +54,7 @@ function deepFreeze<T>(value: T): T {
 
 describe('reveal: первый клик', () => {
   it('расставляет мины и переводит партию в игру', () => {
-    const before = createInitialState({ level: 1, seed: SEED });
+    const before = classicState({ seed: SEED });
     expect(before.status).toBe('idle');
     expect(before.minesPlaced).toBe(false);
     expect(before.board.every((cell) => !cell.hasMine)).toBe(true);
@@ -237,7 +238,7 @@ describe('reveal: флажки', () => {
   });
 
   it('флажок можно ставить до первого клика — мины при этом не расставляются', () => {
-    const initial = createInitialState({ level: 1, seed: SEED });
+    const initial = classicState({ seed: SEED });
     const flagged = toggleFlag(initial, 0);
 
     expect(flagged.flags).toBe(1);
@@ -350,7 +351,7 @@ describe('reveal: пауза', () => {
 
 describe('reveal: иммутабельность', () => {
   it('исходное состояние не меняется после ходов', () => {
-    const before = createInitialState({ level: 1, seed: SEED });
+    const before = classicState({ seed: SEED });
     const snapshot = JSON.stringify(before);
 
     openCell(before, CENTER, T0);
@@ -360,7 +361,7 @@ describe('reveal: иммутабельность', () => {
   });
 
   it('действия работают на глубоко замороженном состоянии (мутаций нет)', () => {
-    const frozen = deepFreeze(createInitialState({ level: 1, seed: SEED }));
+    const frozen = deepFreeze(classicState({ seed: SEED }));
 
     const afterReveal = openCell(frozen, CENTER, T0);
     expect(afterReveal).not.toBe(frozen);

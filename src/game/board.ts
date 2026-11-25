@@ -5,6 +5,7 @@
  * а возвращает новое поле.
  */
 
+import { patternMineCells, type LevelPattern } from './patterns';
 import { shuffle } from './random';
 import type { Board, Cell, CellState, Coord, LevelConfig, Mine, Rng } from './types';
 
@@ -167,6 +168,21 @@ export function withAdjacency(board: Board, config: LevelConfig): Board {
  */
 export function createBoard(config: LevelConfig, safeIndex: number, rng: Rng): Board {
   const withMines = placeMines(createEmptyBoard(config), config, safeIndex, rng);
+  return withAdjacency(withMines, config);
+}
+
+/**
+ * Поле уровня кампании: мины расставлены по фигуре, а не случайно.
+ *
+ * Такое поле полностью определено уровнем — одна и та же фигура при каждом
+ * заходе. Безопасность первого хода обеспечивает не расстановка, а стартовая
+ * зона: игра сама открывает 3×3 вокруг `S` (см. `openStartZone`).
+ */
+export function createPatternBoard(config: LevelConfig, pattern: LevelPattern): Board {
+  const mineIndices = new Set(patternMineCells(pattern, config));
+  const withMines = createEmptyBoard(config).map((cell) =>
+    mineIndices.has(cell.index) ? { ...cell, hasMine: true } : cell,
+  );
   return withAdjacency(withMines, config);
 }
 

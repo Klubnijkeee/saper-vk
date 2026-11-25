@@ -6,6 +6,7 @@
  */
 
 import { getLevelConfig } from './board';
+import { patternForLevel, patternMineCount } from './patterns';
 import type { LevelConfig, ModeId, ModePreset } from './types';
 
 /** Все режимы в порядке показа. */
@@ -48,10 +49,20 @@ export function isModeId(value: string): value is ModeId {
   return MODES.some((mode) => mode.id === value);
 }
 
-/** Поле для режима: у кампании зависит от уровня, у свободной игры — фиксировано. */
+/**
+ * Поле для режима: у кампании зависит от уровня, у свободной игры — фиксировано.
+ *
+ * На уровнях с фигурой число мин берётся из самой фигуры: если оставить
+ * «тарифное» значение, `safeCellsTotal` разойдётся с полем и победа станет
+ * недостижимой — открыть предписанные 71 клетку при 12 минах невозможно.
+ */
 export function configForMode(mode: ModeId, level: number): LevelConfig {
-  if (mode === 'campaign') return getLevelConfig(level);
-  return FREE_CONFIGS[mode];
+  if (mode !== 'campaign') return FREE_CONFIGS[mode];
+
+  const base = getLevelConfig(level);
+  const pattern = patternForLevel(level);
+  if (pattern === null) return base;
+  return { ...base, mines: patternMineCount(pattern) };
 }
 
 /** Кампания — единственный режим, где есть понятие «уровень». */

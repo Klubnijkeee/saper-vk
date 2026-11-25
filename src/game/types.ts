@@ -212,6 +212,14 @@ export interface MetaState {
   readonly stats: Stats;
   /** id открытых достижений. */
   readonly achievements: readonly string[];
+  /**
+   * Докуда дошёл игрок в кампании: следующий уровень для прохождения.
+   * Хранится отдельно от «уровня текущей партии», иначе перепройти старый
+   * уровень означало бы откатить прогресс назад.
+   */
+  readonly campaignLevel: number;
+  /** Оценка уровней кампании: номер уровня → 1..3 звезды. */
+  readonly levelStars: Readonly<Record<string, number>>;
   readonly daily: DailyState;
   readonly vibrationEnabled: boolean;
   /** Показан ли обучающий экран. */
@@ -222,6 +230,7 @@ export interface MetaState {
 export type ScreenId =
   | 'home'
   | 'game'
+  | 'map'
   | 'stats'
   | 'achievements'
   | 'themes'
@@ -330,6 +339,7 @@ export interface StoredProgress {
   readonly unlockedThemes: readonly ThemeId[];
   readonly stats: Stats;
   readonly achievements: readonly string[];
+  readonly levelStars: Readonly<Record<string, number>>;
   readonly daily: DailyState;
   readonly vibrationEnabled: boolean;
   readonly tutorialSeen: boolean;

@@ -12,13 +12,14 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { playExplosion, playHint, playPuff, playReveal, playWin } from '../audio/sfx';
-import { createEmptyBoard, normalizeLevel } from './board';
+import { createEmptyBoard, createPatternBoard, normalizeLevel } from './board';
 import { freezeClock, isClockRunning, resetClock, startClock, tickClock } from './clock';
 import { buyTheme, rollDailyIfNeeded, setTheme, EMPTY_META } from './meta';
 import { configForMode } from './modes';
+import { patternForLevel, patternStartCell } from './patterns';
 import { isSameProgress, progressOf } from './progress';
 import { createSeed } from './random';
-import { openCell, toggleFlag } from './reveal';
+import { openCell, openStartZone, toggleFlag } from './reveal';
 import { applyHint } from './shop';
 import type {
   GameAction,
@@ -58,16 +59,33 @@ function mergeMeta(patch: Partial<MetaState> | undefined): MetaState {
 /** Новая партия. `seed` можно задать явно — для тестов и «повтора партии». */
 export function createInitialState(options: GameOptions = {}): GameState {
   const mode = options.mode ?? DEFAULT_MODE;
-  const level = normalizeLevel(options.level ?? DEFAULT_LEVEL);
+  const base = mergeMeta(options.meta);
+  // Уровень можно задать явно (перепрохождение с карты), иначе берём прогресс кампании.
+  const level = normalizeLevel(
+    options.level ?? (mode === DEFAULT_MODE ? base.campaignLevel : DEFAULT_LEVEL),
+  );
   const config = configForMode(mode, level);
+  /**
+   * Уровни кампании с фигурой приходят с готовой расстановкой мин:
+   * фигура должна уцелеть, поэтому «первый клик безопасен» обеспечивает
+   * стартовая зона, а не расстановка после клика.
+   */
+  const pattern = mode === 'campaign' ? patternForLevel(level) : null;
 
-  return {
+  // Явно указанный уровень кампании — это и есть достигнутый прогресс:
+  // держим мету согласованной, иначе сохранение откатило бы игрока назад.
+  const meta: MetaState =
+    mode === 'campaign' && level > base.campaignLevel
+      ? { ...base, campaignLevel: level }
+      : base;
+
+  const state: GameState = {
     mode,
     level,
     config,
-    board: createEmptyBoard(config),
+    board: pattern === null ? createEmptyBoard(config) : createPatternBoard(config, pattern),
     status: 'idle',
-    minesPlaced: false,
+    minesPlaced: pattern !== null,
     openedSafe: 0,
     flags: 0,
     explodedIndex: null,
@@ -85,8 +103,11 @@ export function createInitialState(options: GameOptions = {}): GameState {
     cellsOpened: 0,
     flagsPlaced: 0,
     hintsUsed: 0,
-    meta: mergeMeta(options.meta),
+    meta,
   };
+
+  if (pattern === null) return state;
+  return openStartZone(state, patternStartCell(pattern, config));
 }
 
 /** Новая партия с сохранением мета-прогресса (монеты, рекорд, звёзды, статистика). */
@@ -171,6 +192,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         unlockedThemes: progress.unlockedThemes ?? state.meta.unlockedThemes,
         stats: progress.stats ?? state.meta.stats,
         achievements: progress.achievements ?? state.meta.achievements,
+        campaignLevel: progress.level ?? state.meta.campaignLevel,
+        levelStars: progress.levelStars ?? state.meta.levelStars,
         daily: progress.daily ?? state.meta.daily,
         vibrationEnabled: progress.vibrationEnabled ?? state.meta.vibrationEnabled,
         tutorialSeen: progress.tutorialSeen ?? state.meta.tutorialSeen,
@@ -184,15 +207,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         patch.unlockedThemes === state.meta.unlockedThemes &&
         patch.stats === state.meta.stats &&
         patch.achievements === state.meta.achievements &&
+        patch.campaignLevel === state.meta.campaignLevel &&
+        patch.levelStars === state.meta.levelStars &&
         patch.daily === state.meta.daily &&
         patch.vibrationEnabled === state.meta.vibrationEnabled &&
         patch.tutorialSeen === state.meta.tutorialSeen;
 
       const meta = metaEqualsState ? state.meta : rollDailyIfNeeded(patch, action.now);
 
-      // Уровень из хранилища применяем только к неначавшейся партии:
-      // посреди игры подменять поле нельзя. Новая партия — новый seed.
-      const startsFresh = level !== state.level && state.status === 'idle' && state.moveId === 0;
+      // Уровень из хранилища применяем только к неначавшейся партии: посреди
+      // игры подменять поле нельзя. «Ход игрока» считаем по открытым им клеткам —
+      // стартовая зона уровня с фигурой ходом не является.
+      const startsFresh = level !== state.level && state.status === 'idle' && state.cellsOpened === 0;
       const next: GameState = startsFresh
         ? createInitialState({ mode: state.mode, level, coins, bestTime, soundEnabled, meta })
         : { ...state, coins, bestTime, soundEnabled, meta };

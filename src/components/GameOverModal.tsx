@@ -10,6 +10,7 @@ import { formatClock } from '../game/clock';
 import { WIN_BONUS_COINS } from '../game/reveal';
 import { MineIcon, TrophyIcon } from './icons';
 import { Modal } from './Modal';
+import { Stars } from './Stars';
 
 export interface GameOverModalProps {
   readonly status: 'won' | 'lost';
@@ -19,6 +20,8 @@ export interface GameOverModalProps {
   readonly modeLabel: string;
   readonly elapsedMs: number;
   readonly bestTime: number | null;
+  /** Оценка уровня кампании: 1–3 звезды. В свободной игре — 0. */
+  readonly earnedStars: number;
   readonly onNextLevel: () => void;
   readonly onRestart: () => void;
   readonly onExit: () => void;
@@ -32,6 +35,7 @@ export function GameOverModal({
   modeLabel,
   elapsedMs,
   bestTime,
+  earnedStars,
   onNextLevel,
   onRestart,
   onExit,
@@ -55,6 +59,12 @@ export function GameOverModal({
       <p className="modal__subtitle">
         {won ? `${modeLabel} пройден` : 'Мина оказалась под ногами'}
       </p>
+
+      {won && earnedStars > 0 ? (
+        <div className="modal__stars">
+          <Stars earned={earnedStars} size={30} />
+        </div>
+      ) : null}
 
       <div className="modal__stats">
         <div className="modal__stat">

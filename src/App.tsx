@@ -18,6 +18,7 @@ import { AchievementsScreen } from './screens/AchievementsScreen';
 import { GameScreen } from './screens/GameScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { HowToPlayScreen } from './screens/HowToPlayScreen';
+import { LevelMapScreen } from './screens/LevelMapScreen';
 import { RecordsScreen } from './screens/RecordsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { StatsScreen } from './screens/StatsScreen';
@@ -31,6 +32,7 @@ const TUTORIAL_DELAY_MS = 900;
 const SCREENS: readonly ScreenId[] = [
   'home',
   'game',
+  'map',
   'stats',
   'achievements',
   'themes',
@@ -136,6 +138,15 @@ export default function App(): ReactElement {
     [startMode, openScreen],
   );
 
+  /** Запуск конкретного уровня кампании с карты (перепрохождение разрешено). */
+  const handlePlayLevel = useCallback(
+    (level: number): void => {
+      startMode('campaign', level);
+      openScreen('game');
+    },
+    [startMode, openScreen],
+  );
+
   const handleThemeBuy = useCallback(
     (theme: ThemeId): void => {
       const preset = findTheme(theme);
@@ -155,10 +166,18 @@ export default function App(): ReactElement {
         <HomeScreen
           meta={state.meta}
           coins={state.coins}
-          level={state.level}
           now={now}
           onPlay={handlePlay}
           onOpen={openScreen}
+        />
+      ) : null}
+
+      {screen === 'map' ? (
+        <LevelMapScreen
+          campaignLevel={state.meta.campaignLevel}
+          levelStars={state.meta.levelStars}
+          onBack={backHome}
+          onPlay={handlePlayLevel}
         />
       ) : null}
 

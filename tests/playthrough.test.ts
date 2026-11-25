@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { cellAt, indexOf } from '../src/game/board';
 import { formatClock } from '../src/game/clock';
 import { openCell, toggleFlag } from '../src/game/reveal';
-import { createInitialState } from '../src/game/useGame';
 import type { GameState } from '../src/game/types';
+import { classicState } from './helpers';
 
 const T0 = 1_700_000_000_000;
 
@@ -44,7 +44,7 @@ function line(label: string): void {
 describe('партия целиком', () => {
   it('печатает поле: старт, каскад, флажок, взрыв', () => {
     const seed = 2024;
-    let state = createInitialState({ level: 1, seed });
+    let state = classicState({ seed });
 
     line(`До первого клика (мин ${state.config.mines}, seed ${seed}):`);
     console.log(render(state));
@@ -77,7 +77,7 @@ describe('партия целиком', () => {
   });
 
   it('печатает выигранную партию с монетами и рекордом', () => {
-    let state = createInitialState({ level: 1, seed: 2024 });
+    let state = classicState({ seed: 2024 });
     state = openCell(state, 40, T0);
 
     for (const cell of state.board) {

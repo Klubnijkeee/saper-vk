@@ -3,19 +3,20 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { cellAt, countSafeCells, getLevelConfig } from '../src/game/board';
+import { cellAt, countSafeCells, getLevelConfig, getMinesForLevel } from '../src/game/board';
+import { PATTERN_LEVELS, patternForLevel, patternMineCount, patternStartCell } from '../src/game/patterns';
 import { openCell, WIN_BONUS_COINS } from '../src/game/reveal';
 import { applyHint } from '../src/game/shop';
 import { createInitialState, gameReducer } from '../src/game/useGame';
 import type { GameState } from '../src/game/types';
+import { CLASSIC_LEVEL, classicState, winGame } from './helpers';
 
 const T0 = 1_700_000_000_000;
 const CENTER = 40;
 
-/** Идущая партия с безопасным первым ходом. */
+/** Идущая партия с безопасным первым ходом (классический уровень, без фигуры). */
 function playingState(seed = 42, bestTime: number | null = null): GameState {
-  const initial = createInitialState({ level: 1, seed, bestTime });
-  return openCell(initial, CENTER, T0);
+  return openCell(classicState({ seed, bestTime }), CENTER, T0);
 }
 
 /** Первая закрытая безопасная клетка. */
@@ -25,23 +26,33 @@ function firstHiddenSafeIndex(state: GameState): number {
   return cell.index;
 }
 
-/** Партия, доведённая до победы в момент `now`. */
-function winGame(state: GameState, now: number): GameState {
-  let current = state;
-  for (const cell of current.board) {
-    if (current.status === 'won') break;
-    if (cell.hasMine) continue;
-    current = openCell(current, cell.index, now);
-  }
-  return current;
-}
-
 describe('useGame: createInitialState', () => {
-  it('по умолчанию — уровень 1, поле без мин, статус idle', () => {
+  it('уровень с фигурой: мины расставлены, стартовая зона открыта', () => {
     const state = createInitialState({ level: 1, seed: 42 });
+    const pattern = patternForLevel(1);
+
+    expect(pattern).not.toBeNull();
+    if (pattern === null) return;
 
     expect(state.level).toBe(1);
-    expect(state.config).toEqual(getLevelConfig(1));
+    expect(state.minesPlaced).toBe(true);
+    expect(state.status).toBe('idle');
+    expect(state.clock).toEqual({ startedAt: null, elapsedMs: 0 });
+    // Число мин берётся из фигуры, иначе победа была бы недостижимой.
+    expect(state.config.mines).toBe(patternMineCount(pattern));
+    expect(state.board.filter((cell) => cell.hasMine)).toHaveLength(patternMineCount(pattern));
+    // Стартовая зона уже открыта, а вокруг неё нет мин.
+    expect(state.openedSafe).toBeGreaterThan(0);
+    const start = patternStartCell(pattern, state.config);
+    expect(cellAt(state.board, start).state).toBe('revealed');
+  });
+
+  it('уровень без фигуры: поле пустое, статус idle', () => {
+    const state = classicState({ seed: 42 });
+
+    expect(state.level).toBe(CLASSIC_LEVEL);
+    expect(state.level).toBeGreaterThan(PATTERN_LEVELS);
+    expect(state.config).toEqual(getLevelConfig(CLASSIC_LEVEL));
     expect(state.board).toHaveLength(81);
     expect(state.status).toBe('idle');
     expect(state.minesPlaced).toBe(false);
@@ -69,16 +80,30 @@ describe('useGame: createInitialState', () => {
     expect(createInitialState({ coins: 12.7 }).coins).toBe(12);
   });
 
+  it('без явного уровня кампания продолжается с сохранённого', () => {
+    const state = createInitialState({ meta: { campaignLevel: 9 } });
+    expect(state.level).toBe(9);
+  });
+
   it('сложность растёт вместе с уровнем', () => {
-    const mines = [1, 5, 6, 10, 11, 30].map((level) => createInitialState({ level }).config.mines);
+    const mines = [1, 5, 6, 10, 11, 30].map((level) => getMinesForLevel(level));
     expect(mines).toEqual([10, 10, 12, 12, 15, 15]);
     expect(countSafeCells(getLevelConfig(11))).toBe(66);
+  });
+
+  it('у каждого уровня с фигурой число мин берётся из фигуры', () => {
+    for (let level = 1; level <= PATTERN_LEVELS; level += 1) {
+      const pattern = patternForLevel(level);
+      expect(pattern).not.toBeNull();
+      if (pattern === null) continue;
+      expect(createInitialState({ level }).config.mines).toBe(patternMineCount(pattern));
+    }
   });
 });
 
 describe('useGame: редьюсер', () => {
   it('REVEAL делает первый безопасный ход', () => {
-    const state = createInitialState({ level: 1, seed: 42 });
+    const state = classicState({ seed: 42 });
     const next = gameReducer(state, { type: 'REVEAL', index: CENTER, now: T0 });
 
     expect(next.status).toBe('playing');
@@ -88,26 +113,43 @@ describe('useGame: редьюсер', () => {
     expect(next.moveId).toBe(1);
   });
 
-  it('TOGGLE_FLAG меняет счётчик флажков и увеличивает moveId', () => {
+  it('на уровне с фигурой мины уже стоят, а стартовая зона открыта', () => {
     const state = createInitialState({ level: 1, seed: 42 });
+
+    expect(state.minesPlaced).toBe(true);
+    expect(state.openedSafe).toBeGreaterThan(0);
+    // Ход по клетке внутри фигуры — это взрыв: безопасность даёт только стартовая зона.
+    const mine = state.board.find((cell) => cell.hasMine && cell.state === 'hidden');
+    expect(mine).toBeDefined();
+    if (mine === undefined) return;
+
+    const boom = gameReducer(state, { type: 'REVEAL', index: mine.index, now: T0 });
+    expect(boom.status).toBe('lost');
+  });
+
+  it('TOGGLE_FLAG меняет счётчик флажков и увеличивает moveId', () => {
+    const state = classicState({ seed: 42 });
     const flagged = gameReducer(state, { type: 'TOGGLE_FLAG', index: 5 });
     expect(flagged.flags).toBe(1);
+    expect(flagged.flagsPlaced).toBe(1);
     expect(flagged.moveId).toBe(1);
 
     const unflagged = gameReducer(flagged, { type: 'TOGGLE_FLAG', index: 5 });
     expect(unflagged.flags).toBe(0);
+    // Снятый флажок в счётчик поставленных не попадает.
+    expect(unflagged.flagsPlaced).toBe(1);
     expect(unflagged.moveId).toBe(2);
   });
 
   it('RESET сохраняет уровень, монеты, рекорд и звук, но начинает партию заново', () => {
-    const playing = gameReducer(createInitialState({ level: 3, seed: 42, coins: 120, bestTime: 30_000 }), {
+    const playing = gameReducer(classicState({ seed: 42, coins: 120, bestTime: 30_000 }), {
       type: 'REVEAL',
       index: CENTER,
       now: T0,
     });
     const reset = gameReducer(playing, { type: 'RESET' });
 
-    expect(reset.level).toBe(3);
+    expect(reset.level).toBe(CLASSIC_LEVEL);
     expect(reset.coins).toBe(playing.coins);
     expect(reset.bestTime).toBe(30_000);
     expect(reset.soundEnabled).toBe(true);
@@ -126,7 +168,8 @@ describe('useGame: редьюсер', () => {
     });
 
     expect(level7.level).toBe(7);
-    expect(level7.config.mines).toBe(12);
+    // У 7-го уровня своя фигура («Ракета», 15 мин) — число берётся из неё.
+    expect(level7.config.mines).toBe(15);
     expect(level7.status).toBe('idle');
     expect(level7.flags).toBe(0);
   });
@@ -136,7 +179,7 @@ describe('useGame: редьюсер', () => {
     const next = gameReducer(won, { type: 'NEXT_LEVEL' });
 
     expect(won.status).toBe('won');
-    expect(next.level).toBe(2);
+    expect(next.level).toBe(CLASSIC_LEVEL + 1);
     expect(next.coins).toBe(won.coins);
     expect(next.bestTime).toBe(won.bestTime);
     expect(next.status).toBe('idle');
@@ -153,13 +196,13 @@ describe('useGame: редьюсер', () => {
     const state = createInitialState({ level: 1, seed: 42 });
     const hydrated = gameReducer(state, {
       type: 'HYDRATE',
-      progress: { coins: 321, level: 5, bestTime: 42_000, soundEnabled: false },
+      progress: { coins: 321, level: CLASSIC_LEVEL, bestTime: 42_000, soundEnabled: false },
       now: T0,
     });
 
     // Уровень из хранилища — стартовый: поле создаётся заново под него.
-    expect(hydrated.level).toBe(5);
-    expect(hydrated.config.mines).toBe(10);
+    expect(hydrated.level).toBe(CLASSIC_LEVEL);
+    expect(hydrated.config.mines).toBe(15);
     expect(hydrated.coins).toBe(321);
     expect(hydrated.bestTime).toBe(42_000);
     expect(hydrated.soundEnabled).toBe(false);
@@ -170,7 +213,7 @@ describe('useGame: редьюсер', () => {
     // Повторный HYDRATE с теми же значениями не пересоздаёт состояние.
     const again = gameReducer(hydrated, {
       type: 'HYDRATE',
-      progress: { coins: 321, level: 5, bestTime: 42_000, soundEnabled: false },
+      progress: { coins: 321, level: CLASSIC_LEVEL, bestTime: 42_000, soundEnabled: false },
       now: T0,
     });
     expect(again).toBe(hydrated);
@@ -190,7 +233,7 @@ describe('useGame: редьюсер', () => {
   });
 
   it('пауза гасит подсветку подсказки', () => {
-    const hinted = applyHint(playingState(), 'show-mine', T0 + 500);
+    const hinted = applyHint({ ...playingState(), coins: 500 }, 'show-mine', T0 + 500);
     expect(hinted.hintedIndex).not.toBeNull();
 
     const paused = gameReducer(hinted, { type: 'PAUSE', now: T0 + 1000 });

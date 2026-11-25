@@ -15,7 +15,7 @@ import { TopBar } from '../components/TopBar';
 import { DEV_BRIDGE_ENABLED } from '../dev';
 import { configForMode, isCampaign } from '../game/modes';
 import { remainingMines } from '../game/reveal';
-import { bestTimeFor } from '../game/stats';
+import { bestTimeFor, starsForLevel } from '../game/stats';
 import { canAfford, findShopItem, hasHintTarget, isShopAvailable } from '../game/shop';
 import type { GameState, ShopItemId } from '../game/types';
 
@@ -173,21 +173,35 @@ export function GameScreen({
     const later = (action: () => void, delayMs: number): number =>
       window.setTimeout(action, delayMs);
 
+    /**
+     * «Обычный ход» сценария. На уровнях с фигурой мины уже стоят, поэтому
+     * фиксированный индекс 40 может оказаться миной — берём безопасную клетку.
+     */
+    const safeReveal = (): void => {
+      const current = stateRef.current;
+      if (!current.minesPlaced) {
+        onReveal(40);
+        return;
+      }
+      const cell = current.board.find((item) => !item.hasMine && item.state === 'hidden');
+      if (cell !== undefined) onReveal(cell.index);
+    };
+
     const timer = later(() => {
       const bridge = window.__SAPER__;
       if (bridge === undefined) return;
 
-      if (scenario === 'play') bridge.reveal(40);
+      if (scenario === 'play') safeReveal();
 
       if (scenario === 'pause') {
-        bridge.reveal(40);
+        safeReveal();
         later(() => {
           bridge.pause();
         }, 1400);
       }
 
       if (scenario === 'flag') {
-        bridge.reveal(40);
+        safeReveal();
         later(() => {
           const target = stateRef.current.board.find(
             (cell) => cell.state === 'hidden' && cell.adjacentMines > 0,
@@ -197,7 +211,7 @@ export function GameScreen({
       }
 
       if (scenario === 'lose' || scenario === 'lose-peek') {
-        bridge.reveal(40);
+        safeReveal();
         later(() => {
           bridge.lose();
           if (scenario === 'lose-peek') {
@@ -209,7 +223,7 @@ export function GameScreen({
       }
 
       if (scenario === 'win' || scenario === 'win-peek') {
-        bridge.reveal(40);
+        safeReveal();
         later(() => {
           bridge.win();
           if (scenario === 'win-peek') {
@@ -222,13 +236,13 @@ export function GameScreen({
 
       // «Богатое» состояние: победа → следующий уровень → ход.
       if (scenario === 'shop-all' || scenario === 'hint-show' || scenario === 'hint-remove') {
-        bridge.reveal(40);
+        safeReveal();
         later(() => {
           bridge.win();
           later(() => {
             bridge.nextLevel();
             later(() => {
-              bridge.reveal(40);
+              safeReveal();
               if (scenario === 'hint-show' || scenario === 'hint-remove') {
                 later(() => {
                   bridge.applyHint(scenario === 'hint-show' ? 'show-mine' : 'remove-mine');
@@ -240,7 +254,7 @@ export function GameScreen({
       }
 
       if (scenario === 'sound-off') {
-        bridge.reveal(40);
+        safeReveal();
         later(() => {
           bridge.toggleSound();
           later(() => {
@@ -263,6 +277,11 @@ export function GameScreen({
   const modeCaption = campaign
     ? `Поле ${modeConfig.cols}×${modeConfig.rows}`
     : `${modeConfig.mines} мин`;
+  /** Оценка уровня показывается только в кампании и только на победе. */
+  const earnedStars =
+    campaign && state.status === 'won'
+      ? starsForLevel(modeConfig.mines, state.clock.elapsedMs, state.hintsUsed)
+      : 0;
 
   return (
     <div className="game" style={{ '--cols': modeConfig.cols } as GameStyle}>
@@ -304,6 +323,7 @@ export function GameScreen({
           modeLabel={modeLabel}
           elapsedMs={state.clock.elapsedMs}
           bestTime={bestTimeFor(state.meta.stats, state.mode)}
+          earnedStars={earnedStars}
           onNextLevel={onNextLevel}
           onRestart={onRestart}
           onExit={onExit}

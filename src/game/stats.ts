@@ -99,3 +99,29 @@ export function averageTimeMs(stats: Stats): number | null {
 export function bestTimeFor(stats: Stats, mode: ModeId): number | null {
   return stats.byMode[mode]?.bestTimeMs ?? null;
 }
+
+// ── Оценка уровня кампании ──────────────────────────────────────────────────
+
+/** Сколько секунд даётся на мину, чтобы уложиться на три звезды. */
+const SECONDS_PER_MINE = 5;
+/** Минимальный «паритет» уровня, мс: совсем маленькие поля не должны быть злыми. */
+const MIN_PAR_MS = 25_000;
+
+/** Время, за которое уровень проходится на три звезды. */
+export function parTimeMs(mines: number): number {
+  return Math.max(MIN_PAR_MS, mines * SECONDS_PER_MINE * 1000);
+}
+
+/**
+ * Оценка пройденного уровня: 1–3 звезды.
+ *
+ * Три — уложился в паритет и не брал подсказок, две — вдвое дольше или одна
+ * подсказка, иначе одна звезда. Оценка нужна и как украшение карты, и как
+ * награда: звёзды за первое прохождение падают в кошелёк.
+ */
+export function starsForLevel(mines: number, timeMs: number, hintsUsed: number): 1 | 2 | 3 {
+  const par = parTimeMs(mines);
+  if (hintsUsed === 0 && timeMs <= par) return 3;
+  if (hintsUsed <= 1 && timeMs <= par * 2) return 2;
+  return 1;
+}

@@ -68,6 +68,51 @@ const SCENARIOS = [
     waitMs: 1600,
     storage: { theme: 'neon', themes: '["classic","neon"]' },
   },
+  // Карта кампании: часть уровней пройдена, у них оценки в звёздах.
+  {
+    name: '41-map',
+    query: '?screen=map',
+    waitMs: 1000,
+    storage: {
+      theme: 'classic',
+      level: '6',
+      stars: '11',
+      levelStars: '{"1":3,"2":3,"3":2,"4":2,"5":1}',
+    },
+  },
+  // Низ карты: видно, что дальше узлы закрыты замками.
+  {
+    name: '42-map-bottom',
+    query: '?screen=map',
+    waitMs: 1000,
+    scroll: true,
+    storage: {
+      theme: 'classic',
+      level: '6',
+      stars: '11',
+      levelStars: '{"1":3,"2":3,"3":2,"4":2,"5":1}',
+    },
+  },
+  // Проигрыш в кампании раскрывает все мины — видно саму фигуру уровня.
+  // Кадр с «подсмотром»: модалка убрана, поле видно целиком.
+  {
+    name: '43-shape-cat',
+    query: '?dev=lose-peek',
+    waitMs: 4400,
+    storage: { theme: 'classic', level: '16' },
+  },
+  {
+    name: '44-shape-tank',
+    query: '?dev=lose-peek',
+    waitMs: 4400,
+    storage: { theme: 'classic', level: '10' },
+  },
+  {
+    name: '45-shape-fish',
+    query: '?dev=lose-peek',
+    waitMs: 4400,
+    storage: { theme: 'classic', level: '14' },
+  },
 ];
 
 const DIAGNOSTICS = `(() => {
@@ -211,6 +256,18 @@ for (const scenario of SCENARIOS) {
 // с меню, а отладочный мост живёт только на игровом экране.
 const GAME_URL = `${baseUrl}/?dev=start`;
 
+/**
+ * Открыть заведомо безопасную клетку. Кликать по фиксированному индексу нельзя:
+ * на уровнях кампании мины стоят по фигуре, и там может оказаться мина.
+ */
+async function revealSafeCell() {
+  await evaluate(`(() => {
+    const state = window.__SAPER__.getState();
+    const cell = state.board.find((item) => !item.hasMine && item.state === 'hidden');
+    if (cell !== undefined) window.__SAPER__.reveal(cell.index);
+  })()`);
+}
+
 await openPage(GAME_URL);
 await evaluate('localStorage.clear()');
 const fresh = await openPage(GAME_URL).then(() => shoot('14-progress-start'));
@@ -218,7 +275,7 @@ check(fresh.state.level === 1, `уровень после очистки: ${fres
 check(fresh.state.coins === 0, `монеты после очистки: ${fresh.state.coins}`);
 
 // 1. Открыли клетку → монеты начислились и сохранились.
-await evaluate('window.__SAPER__.reveal(40)');
+await revealSafeCell();
 await sleep(900);
 const afterMove = await shoot('15-coins-after-move');
 check(afterMove.state.coins > 0, `монеты не начислились (${afterMove.state.coins})`);
@@ -240,7 +297,12 @@ check(won.state.status === 'won', `партия не выиграна (${won.sta
 
 await openPage(GAME_URL);
 const winReload = await shoot('18-win-after-reload');
-check(winReload.state.level === 2, `уровень не сохранился: ${winReload.state.level}`);
+// Уровень из хранилища — следующий после победного: сколько именно побед
+// успело случиться по ходу цепочки, не фиксируем.
+check(
+  winReload.state.level === won.state.level + 1,
+  `уровень не сохранился: ${winReload.state.level} вместо ${won.state.level + 1}`,
+);
 check(
   typeof winReload.state.bestTime === 'number' && winReload.state.bestTime > 0,
   `рекорд не сохранился: ${winReload.state.bestTime}`,
@@ -251,7 +313,7 @@ check(
 );
 
 // 3. Потратили 100 монет на «Убрать мину» → монеты уменьшились ровно на 100.
-await evaluate('window.__SAPER__.reveal(40)');
+await revealSafeCell();
 await sleep(900);
 const coinsBeforeSpend = await evaluate('window.__SAPER__.getState().coins');
 await evaluate("window.__SAPER__.applyHint('remove-mine')");
@@ -269,7 +331,10 @@ check(
   spendReload.state.coins === spent.state.coins,
   `монеты после траты не пережили перезагрузку: ${spent.state.coins} → ${spendReload.state.coins}`,
 );
-check(spendReload.state.level === 2, `уровень изменился без победы: ${spendReload.state.level}`);
+check(
+  spendReload.state.level === winReload.state.level,
+  `уровень изменился без победы: ${spendReload.state.level}`,
+);
 
 console.log('\nвсе проверки прогресса пройдены');
 

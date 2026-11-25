@@ -40,7 +40,6 @@ const MODE_ICONS: Readonly<Record<ModeIconId, (props: { size?: number }) => Reac
 export interface HomeScreenProps {
   readonly meta: MetaState;
   readonly coins: number;
-  readonly level: number;
   /** «Сейчас» — нужно, чтобы показать набор заданий на сегодня. */
   readonly now: number;
   readonly onPlay: (mode: ModeId) => void;
@@ -50,7 +49,6 @@ export interface HomeScreenProps {
 export function HomeScreen({
   meta,
   coins,
-  level,
   now,
   onPlay,
   onOpen,
@@ -61,8 +59,10 @@ export function HomeScreen({
     (task) => task.measure(meta.daily.counters) >= task.goal,
   ).length;
   const unlocked = meta.achievements.length;
+  const level = meta.campaignLevel;
   const campaignConfig: LevelConfig = configForMode('campaign', level);
   const campaignRecord = bestTimeFor(meta.stats, 'campaign');
+  const levelStars = Object.values(meta.levelStars).reduce((sum, value) => sum + value, 0);
   const freeModes = MODES.filter((mode) => mode.id !== 'campaign');
   const rate = Math.round(winRate(meta.stats) * 100);
 
@@ -86,19 +86,20 @@ export function HomeScreen({
       </header>
 
       <div className="screen__body hub__body">
-        <button type="button" className="hero" onClick={() => onPlay('campaign')}>
+        <button type="button" className="hero" onClick={() => onOpen('map')}>
           <span className="hero__icon" aria-hidden="true">
             <MapIcon size={30} />
           </span>
           <span className="hero__text">
-            <span className="hero__eyebrow">Кампания</span>
+            <span className="hero__eyebrow">Кампания · карта уровней</span>
             <span className="hero__title">Уровень {level}</span>
             <span className="hero__subtitle">
               Поле {campaignConfig.rows}×{campaignConfig.cols} · {campaignConfig.mines} мин
+              {levelStars === 0 ? '' : ` · ★ ${levelStars}`}
               {campaignRecord === null ? '' : ` · рекорд ${formatClock(campaignRecord)}`}
             </span>
           </span>
-          <span className="hero__go">Играть</span>
+          <span className="hero__go">Карта</span>
         </button>
 
         <section className="panel">

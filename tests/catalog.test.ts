@@ -5,17 +5,29 @@
 import { describe, expect, it } from 'vitest';
 import { getLevelConfig } from '../src/game/board';
 import { FREE_CONFIGS, FREE_MODES, MODES, configForMode, findMode, isCampaign } from '../src/game/modes';
+import { PATTERN_LEVELS, patternForLevel, patternMineCount } from '../src/game/patterns';
 import { DEFAULT_THEME, THEMES, findTheme, isThemeUnlocked, lockedThemes } from '../src/game/themes';
 import type { ModeId } from '../src/game/types';
 
 describe('modes: режимы игры', () => {
   it('кампания идёт первой и получает поле по уровню', () => {
-    const initial = { mode: 'campaign' as ModeId, level: 7 };
-
-    expect(MODES[0]?.id).toBe('campaign');
-    expect(configForMode(initial.mode, initial.level)).toEqual(getLevelConfig(7));
+    // Уровень с фигурой берёт число мин из фигуры, уровень без фигуры — из тарифа.
+    expect(configForMode('campaign', PATTERN_LEVELS + 1)).toEqual(
+      getLevelConfig(PATTERN_LEVELS + 1),
+    );
     expect(isCampaign('campaign')).toBe(true);
     expect(isCampaign('novice')).toBe(false);
+  });
+
+  it('уровень с фигурой получает столько мин, сколько нарисовано', () => {
+    for (let level = 1; level <= PATTERN_LEVELS; level += 1) {
+      const pattern = patternForLevel(level);
+      if (pattern === null) continue;
+      const config = configForMode('campaign', level);
+      expect(config.mines, `уровень ${level}`).toBe(patternMineCount(pattern));
+      expect(config.rows).toBe(9);
+      expect(config.cols).toBe(9);
+    }
   });
 
   it('свободная игра: классические поля и число мин', () => {

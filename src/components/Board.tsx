@@ -95,6 +95,10 @@ export function Board({ state, onReveal, onFlag }: BoardProps): ReactElement {
         role="group"
         aria-label={`Игровое поле ${config.rows} на ${config.cols}`}
         data-status={status}
+        onContextMenu={(event) => {
+          // Вторая линия обороны: у отключённых клеток событие до них не доходит.
+          event.preventDefault();
+        }}
       >
         {board.map((cell) => {
           const animation = animations.get(cell.index) ?? null;
