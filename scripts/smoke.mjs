@@ -16,6 +16,11 @@ import { join } from 'node:path';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:4173';
 const shotPath = process.argv[3] ?? null;
+/**
+ * Необязательный прогресс для проверки: `ключ=значение,ключ=значение`.
+ * Формат без кавычек и JSON — так его удобно передавать из любой оболочки.
+ */
+const storageSpec = process.argv[4] ?? null;
 const DEBUG_PORT = 9337;
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
@@ -117,7 +122,21 @@ try {
   });
 
   await send('Page.navigate', { url });
-  await sleep(6000);
+  await sleep(4000);
+
+  // Если задан прогресс — подставляем его и перезагружаем страницу: так видно
+  // не первый запуск с обучением, а игру с уровнями, жизнями и темами.
+  if (storageSpec !== null) {
+    const writes = storageSpec
+      .split(',')
+      .map((pair) => pair.split('='))
+      .filter(([key]) => key !== undefined && key !== '')
+      .map(([key, value]) => `localStorage.setItem('saper:${key}', ${JSON.stringify(value ?? '')});`)
+      .join(' ');
+    await evaluate(`(() => { ${writes} })()`);
+    await send('Page.navigate', { url });
+    await sleep(4000);
+  }
 
   const report = {
     url,
