@@ -1,0 +1,24 @@
+node_modules
+dist
+dist-ssr
+coverage
+*.local
+.DS_Store
+.vite
+*.log
+
+# Инструменты скриншотов (Chrome DevTools Protocol)
+.chrome-cdp/
+.chrome-profile/
+.chrome-shots/
+.dom-dump.html
+
+# Локальные инструменты сборки ассетов (ffmpeg для промовидео)
+.tools/
+.video-work/
+
+# Кеш Python от скриптов оформления
+scripts/__pycache__/
+
+# Промовидео — результат сборки, а не исходник (пересобирается из scripts/)
+art/promo-*.mp4
