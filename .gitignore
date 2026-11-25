@@ -12,3 +12,13 @@ coverage
 .chrome-profile/
 .chrome-shots/
 .dom-dump.html
+
+# Локальные инструменты сборки ассетов (ffmpeg для промовидео)
+.tools/
+.video-work/
+
+# Кеш Python от скриптов оформления
+scripts/__pycache__/
+
+# Промовидео — результат сборки, а не исходник (пересобирается из scripts/)
+art/promo-*.mp4
