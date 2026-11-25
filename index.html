@@ -11,10 +11,64 @@
     <meta name="description" content="Сапёр с магазином подсказок — VK Mini App" />
     <link rel="icon" type="image/png" href="./favicon.png" />
     <title>Сапёр: Магазин</title>
+    <script>
+      /*
+       * Страховка от «белого экрана».
+       *
+       * Если модуль не загрузился или упал до отрисовки, игрок видел просто
+       * пустое тёмное окно и не мог ничего сообщить. Здесь мы запоминаем первую
+       * ошибку и, если приложение не поднялось за 6 секунд, показываем причину
+       * прямо на странице — это единственный способ увидеть её внутри ВК.
+       */
+      (function () {
+        var problems = [];
+        window.__SAPER_PROBLEMS__ = problems;
+
+        window.addEventListener('error', function (event) {
+          var target = event.target;
+          if (target && target !== window && target.tagName === 'SCRIPT') {
+            problems.push('Не загрузился файл: ' + (target.src || 'скрипт'));
+            return;
+          }
+          problems.push(event.message || String(event.error || 'Неизвестная ошибка'));
+        });
+
+        window.addEventListener('unhandledrejection', function (event) {
+          problems.push('Промис отклонён: ' + String(event.reason));
+        });
+
+        function show(reason) {
+          var root = document.getElementById('root');
+          if (!root || root.childElementCount > 0) return;
+
+          root.innerHTML =
+            '<div style="padding:24px;font:15px/1.5 system-ui,sans-serif;color:#f2f3f5;background:#121212;min-height:100dvh;box-sizing:border-box">' +
+            '<h1 style="font-size:20px;margin:0 0 8px">Приложение не запустилось</h1>' +
+            '<p style="color:#9b9b9b;margin:0 0 12px">Скорее всего устарел кеш страницы. Закройте и откройте мини-приложение заново.</p>' +
+            '<p style="color:#9b9b9b;margin:0 0 4px">Что сообщил браузер:</p>' +
+            '<pre style="white-space:pre-wrap;word-break:break-word;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:10px;margin:0 0 16px;font-size:12px">' +
+            String(reason).replace(/[<>&]/g, '') +
+            '</pre>' +
+            '<button onclick="location.reload(true)" style="width:100%;padding:14px;border:0;border-radius:12px;background:#3b7dff;color:#fff;font:inherit;font-weight:700">Обновить</button>' +
+            '</div>';
+        }
+
+        window.__SAPER_SHOW_PROBLEM__ = show;
+
+        window.setTimeout(function () {
+          show(problems.length > 0 ? problems.join('\n') : 'Приложение не отрисовалось за 6 секунд');
+        }, 6000);
+      })();
+    </script>
     <script type="module" crossorigin src="./assets/app.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index.css">
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <p style="padding: 24px; font: 15px system-ui, sans-serif; color: #f2f3f5">
+        Для игры нужен включённый JavaScript.
+      </p>
+    </noscript>
   </body>
 </html>
