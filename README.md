@@ -110,11 +110,26 @@ npm run typecheck
 2. `npm run build`
 3. Опубликуй содержимое `dist/` в ветку `gh-pages`:
    ```bash
-   npx gh-pages -d dist
+   npx gh-pages -d dist --remove never
    ```
-   либо через Actions (`actions/upload-pages-artifact` + `actions/deploy-pages`).
+   Флаг `--remove never` обязателен: без него публикация удаляет файлы прошлой
+   сборки, а закешированный `index.html` (кеш браузера, веб-вью ВК, CDN Pages)
+   продолжает ссылаться на уже удалённый файл — приложение открывается белым
+   экраном. По той же причине имена файлов сборки **без хеша**
+   (`assets/app.js`, `assets/index.css`, см. `rollupOptions.output` в
+   `vite.config.ts`): тогда старый HTML всегда находит свои файлы.
 4. Settings → Pages → Source: ветка `gh-pages`.
    Адрес: `https://<логин>.github.io/<репозиторий>/`.
+5. Проверь боевой адрес дымовым тестом — он открывает страницу в headless Chrome,
+   слушает ошибки и снимает скриншот:
+   ```bash
+   node scripts/smoke.mjs https://<логин>.github.io/<репозиторий>/ shot.png
+   ```
+
+Если после публикации ВК показывает старую версию — это кеш: GitHub Pages держит
+`index.html` 10 минут, плюс свой кеш у веб-вью ВК. Полностью закрой и открой
+мини-приложение; если залипло — добавь `?v=2` к адресу в настройках приложения,
+ВК воспримет это как новый URL.
 
 ### Любой другой хостинг
 
@@ -300,6 +315,7 @@ saper-vk/
 ├─ screenshots/       снимки состояний и разделов (генерирует scripts/screenshot.mjs)
 ├─ scripts/
 │  ├─ screenshot.mjs     скриншоты состояний и разделов + проверка прогресса через CDP
+│  ├─ smoke.mjs          дымовой тест боевого адреса: ошибки, запросы, скриншот
 │  ├─ serve-dist.mjs     мини-сервер над dist/ для проверок (vite preview требует esbuild)
 │  ├─ make-art.py        генератор оформления (иконки, сниппет, превью фона)
 │  ├─ make-lottie.py     генератор анимированной иконки (Lottie JSON)
