@@ -6,7 +6,17 @@
 import { describe, expect, it } from 'vitest';
 import { ACHIEVEMENTS } from '../src/game/achievements';
 import { dateKey } from '../src/game/daily';
-import { EMPTY_META, applyMatchEnd, awardLevelStars, buyTheme, rollDailyIfNeeded, setTheme } from '../src/game/meta';
+import { LIFE_PRICE_STARS, LIFE_REGEN_MS, MAX_LIVES } from '../src/game/lives';
+import {
+  EMPTY_META,
+  applyMatchEnd,
+  awardLevelStars,
+  buyLife,
+  buyTheme,
+  refreshMetaLives,
+  rollDailyIfNeeded,
+  setTheme,
+} from '../src/game/meta';
 import { openCell } from '../src/game/reveal';
 import { bestTimeFor } from '../src/game/stats';
 import { DEFAULT_THEME, findTheme } from '../src/game/themes';
@@ -93,6 +103,53 @@ describe('meta: исход партии', () => {
   it('rollDailyIfNeeded не трогает состояние в тот же день', () => {
     const meta = applyMatchEnd(EMPTY_META, end());
     expect(rollDailyIfNeeded(meta, T0)).toBe(meta);
+  });
+});
+
+describe('meta: жизни', () => {
+  it('проигрыш в кампании списывает жизнь', () => {
+    const lost = applyMatchEnd(EMPTY_META, end({ won: false }));
+
+    expect(lost.lives).toBe(MAX_LIVES - 1);
+  });
+
+  it('проигрыш в свободной игре жизнь не тратит', () => {
+    const lost = applyMatchEnd(EMPTY_META, end({ mode: 'novice', won: false }));
+
+    expect(lost.lives).toBe(MAX_LIVES);
+  });
+
+  it('победа жизнь не тратит, но догоняет регенерацию', () => {
+    const spent = applyMatchEnd(EMPTY_META, end({ won: false }));
+    expect(spent.lives).toBe(MAX_LIVES - 1);
+
+    const won = applyMatchEnd(spent, end({ now: T0 + LIFE_REGEN_MS * 3 }));
+    expect(won.lives).toBe(MAX_LIVES);
+  });
+
+  it('покупка жизни списывает звёзды', () => {
+    const spent = applyMatchEnd({ ...EMPTY_META, stars: 100 }, end({ won: false }));
+    const bought = buyLife(spent, T0);
+
+    expect(bought.lives).toBe(MAX_LIVES);
+    expect(bought.stars).toBe(spent.stars - LIFE_PRICE_STARS);
+  });
+
+  it('без звёзд или на полном наборе покупка не проходит', () => {
+    expect(buyLife(EMPTY_META, T0)).toBe(EMPTY_META);
+
+    const poor = applyMatchEnd({ ...EMPTY_META, stars: 0 }, end({ won: false }));
+    expect(buyLife(poor, T0)).toBe(poor);
+  });
+
+  it('refreshMetaLives не трогает состояние, когда менять нечего', () => {
+    // Полный набор: таймер не копит, объект остаётся тем же.
+    expect(refreshMetaLives(EMPTY_META, T0)).toBe(EMPTY_META);
+
+    const spent = applyMatchEnd(EMPTY_META, end({ won: false }));
+    expect(spent.lives).toBe(MAX_LIVES - 1);
+    expect(refreshMetaLives(spent, T0 + 1000)).toBe(spent);
+    expect(refreshMetaLives(spent, T0 + LIFE_REGEN_MS).lives).toBe(MAX_LIVES);
   });
 });
 

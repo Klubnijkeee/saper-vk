@@ -10,6 +10,7 @@
  */
 
 import { EMPTY_COUNTERS, EMPTY_DAILY } from './daily';
+import { MAX_LIVES } from './lives';
 import { EMPTY_MODE_STATS, EMPTY_STATS } from './stats';
 import { DEFAULT_THEME, THEMES } from './themes';
 import { MODES } from './modes';
@@ -36,6 +37,8 @@ export const PROGRESS_KEYS = {
   stats: 'stats',
   achievements: 'achievements',
   levelStars: 'levelStars',
+  lives: 'lives',
+  livesAt: 'livesAt',
   daily: 'daily',
   vibration: 'vibration',
   tutorial: 'tutorial',
@@ -53,6 +56,8 @@ export const DEFAULT_PROGRESS: StoredProgress = {
   stats: EMPTY_STATS,
   achievements: [],
   levelStars: {},
+  lives: MAX_LIVES,
+  livesAt: 0,
   daily: EMPTY_DAILY,
   vibrationEnabled: true,
   tutorialSeen: false,
@@ -76,6 +81,8 @@ export function progressOf(state: GameState): StoredProgress {
     stats: state.meta.stats,
     achievements: state.meta.achievements,
     levelStars: state.meta.levelStars,
+    lives: state.meta.lives,
+    livesAt: state.meta.livesAt,
     daily: state.meta.daily,
     vibrationEnabled: state.meta.vibrationEnabled,
     tutorialSeen: state.meta.tutorialSeen,
@@ -100,6 +107,8 @@ export function progressToRaw(progress: StoredProgress): Readonly<Record<string,
     [PROGRESS_KEYS.stats]: JSON.stringify(progress.stats),
     [PROGRESS_KEYS.achievements]: JSON.stringify(progress.achievements),
     [PROGRESS_KEYS.levelStars]: JSON.stringify(progress.levelStars),
+    [PROGRESS_KEYS.lives]: String(progress.lives),
+    [PROGRESS_KEYS.livesAt]: String(progress.livesAt),
     [PROGRESS_KEYS.daily]: JSON.stringify(progress.daily),
     [PROGRESS_KEYS.vibration]: progress.vibrationEnabled ? 'true' : 'false',
     [PROGRESS_KEYS.tutorial]: progress.tutorialSeen ? 'true' : 'false',
@@ -119,6 +128,8 @@ export function progressFromRaw(values: ReadonlyMap<string, string>): StoredProg
     stats: parseStats(values.get(PROGRESS_KEYS.stats)),
     achievements: parseIds(values.get(PROGRESS_KEYS.achievements)),
     levelStars: parseLevelStars(values.get(PROGRESS_KEYS.levelStars)),
+    lives: parseLives(values.get(PROGRESS_KEYS.lives)),
+    livesAt: parseTimestamp(values.get(PROGRESS_KEYS.livesAt)),
     daily: parseDaily(values.get(PROGRESS_KEYS.daily)),
     vibrationEnabled: parseBoolean(values.get(PROGRESS_KEYS.vibration), true),
     tutorialSeen: parseBoolean(values.get(PROGRESS_KEYS.tutorial), false),
@@ -216,6 +227,19 @@ function parseLevelStars(raw: string | undefined): Readonly<Record<string, numbe
     result[String(level)] = count;
   }
   return result;
+}
+
+/** Жизни: целое 0..MAX_LIVES; мусор приводим к полному набору. */
+function parseLives(raw: string | undefined): number {
+  const value = Number.parseInt(raw ?? '', 10);
+  if (!Number.isFinite(value) || value < 0) return MAX_LIVES;
+  return Math.min(MAX_LIVES, value);
+}
+
+/** Момент времени: неотрицательное целое или 0. */
+function parseTimestamp(raw: string | undefined): number {
+  const value = Number.parseInt(raw ?? '', 10);
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 function parseModeStats(value: unknown): ModeStats {

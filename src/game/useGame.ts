@@ -14,9 +14,9 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { playExplosion, playHint, playPuff, playReveal, playWin } from '../audio/sfx';
 import { createEmptyBoard, createPatternBoard, normalizeLevel } from './board';
 import { freezeClock, isClockRunning, resetClock, startClock, tickClock } from './clock';
-import { buyTheme, rollDailyIfNeeded, setTheme, EMPTY_META } from './meta';
+import { buyLife, buyTheme, refreshMetaLives, rollDailyIfNeeded, setTheme, EMPTY_META } from './meta';
 import { configForMode } from './modes';
-import { patternForLevel, patternStartCell } from './patterns';
+import { patternForAttempt, patternStartCell } from './patterns';
 import { isSameProgress, progressOf } from './progress';
 import { createSeed } from './random';
 import { openCell, openStartZone, toggleFlag } from './reveal';
@@ -45,6 +45,9 @@ export const TICK_INTERVAL_MS = 250;
 /** Сколько горит подсветка подсказки «Показать мину». */
 export const HINT_DURATION_MS = 2000;
 
+/** Как часто пересчитывать регенерацию жизней. */
+export const LIVES_TICK_MS = 30_000;
+
 /** Исчерпывающая проверка: если добавить действие и забыть обработать — упадёт компиляция. */
 function assertNever(value: never): never {
   throw new Error(`Необработанное действие: ${JSON.stringify(value)}`);
@@ -65,12 +68,15 @@ export function createInitialState(options: GameOptions = {}): GameState {
     options.level ?? (mode === DEFAULT_MODE ? base.campaignLevel : DEFAULT_LEVEL),
   );
   const config = configForMode(mode, level);
+  const seed = (options.seed ?? createSeed()) >>> 0;
   /**
    * Уровни кампании с фигурой приходят с готовой расстановкой мин:
    * фигура должна уцелеть, поэтому «первый клик безопасен» обеспечивает
-   * стартовая зона, а не расстановка после клика.
+   * стартовая зона, а не расстановка после клика. Вариант отражения берётся
+   * из зерна партии: после проигрыша поле раскрыто, и та же раскладка во второй
+   * попытке была бы подсказкой.
    */
-  const pattern = mode === 'campaign' ? patternForLevel(level) : null;
+  const pattern = mode === 'campaign' ? patternForAttempt(level, seed) : null;
 
   // Явно указанный уровень кампании — это и есть достигнутый прогресс:
   // держим мету согласованной, иначе сохранение откатило бы игрока назад.
@@ -89,7 +95,7 @@ export function createInitialState(options: GameOptions = {}): GameState {
     openedSafe: 0,
     flags: 0,
     explodedIndex: null,
-    seed: (options.seed ?? createSeed()) >>> 0,
+    seed,
     coins: Math.max(0, Math.floor(options.coins ?? 0)),
     bestTime: options.bestTime ?? null,
     clock: resetClock(),
@@ -169,6 +175,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         meta: { ...state.meta, vibrationEnabled: !state.meta.vibrationEnabled },
       };
+    case 'TICK_LIVES': {
+      const meta = refreshMetaLives(state.meta, action.now);
+      return meta === state.meta ? state : { ...state, meta };
+    }
+    case 'BUY_LIFE': {
+      const meta = buyLife(state.meta, action.now);
+      return meta === state.meta ? state : { ...state, meta };
+    }
     case 'MARK_TUTORIAL_SEEN':
       return state.meta.tutorialSeen ? state : { ...state, meta: { ...state.meta, tutorialSeen: true } };
     case 'SET_THEME': {
@@ -194,6 +208,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         achievements: progress.achievements ?? state.meta.achievements,
         campaignLevel: progress.level ?? state.meta.campaignLevel,
         levelStars: progress.levelStars ?? state.meta.levelStars,
+        lives: progress.lives ?? state.meta.lives,
+        livesAt: progress.livesAt ?? state.meta.livesAt,
         daily: progress.daily ?? state.meta.daily,
         vibrationEnabled: progress.vibrationEnabled ?? state.meta.vibrationEnabled,
         tutorialSeen: progress.tutorialSeen ?? state.meta.tutorialSeen,
@@ -209,12 +225,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         patch.achievements === state.meta.achievements &&
         patch.campaignLevel === state.meta.campaignLevel &&
         patch.levelStars === state.meta.levelStars &&
+        patch.lives === state.meta.lives &&
+        patch.livesAt === state.meta.livesAt &&
         patch.daily === state.meta.daily &&
         patch.vibrationEnabled === state.meta.vibrationEnabled &&
         patch.tutorialSeen === state.meta.tutorialSeen;
 
-      const meta = metaEqualsState ? state.meta : rollDailyIfNeeded(patch, action.now);
-
+      // Загруженные жизни сразу догоняем по времени: пока игра была закрыта,
+      // часть могла восстановиться.
+      const meta = metaEqualsState
+        ? state.meta
+        : refreshMetaLives(rollDailyIfNeeded(patch, action.now), action.now);
       // Уровень из хранилища применяем только к неначавшейся партии: посреди
       // игры подменять поле нельзя. «Ход игрока» считаем по открытым им клеткам —
       // стартовая зона уровня с фигурой ходом не является.
@@ -254,6 +275,8 @@ export interface UseGameResult {
   readonly markTutorialSeen: () => void;
   readonly setTheme: (theme: ThemeId) => void;
   readonly buyTheme: (theme: ThemeId) => void;
+  /** Купить жизнь за звёзды. */
+  readonly buyLife: () => void;
 }
 
 /**
@@ -403,6 +426,24 @@ export function useGame(
     dispatch({ type: 'BUY_THEME', theme });
   }, []);
 
+  const buyLifeAction = useCallback((): void => {
+    dispatch({ type: 'BUY_LIFE', now: Date.now() });
+  }, []);
+
+  /**
+   * Жизни восстанавливаются по времени. Раз в полминуты просим редьюсер
+   * пересчитать их: если ничего не накапало, он вернёт то же состояние,
+   * и перерисовки с записью в хранилище не будет.
+   */
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      dispatch({ type: 'TICK_LIVES', now: Date.now() });
+    }, LIVES_TICK_MS);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
   return useMemo(
     () => ({
       state,
@@ -419,6 +460,7 @@ export function useGame(
       markTutorialSeen,
       setTheme: setThemeById,
       buyTheme: buyThemeById,
+      buyLife: buyLifeAction,
     }),
     [
       state,
@@ -435,6 +477,7 @@ export function useGame(
       markTutorialSeen,
       setThemeById,
       buyThemeById,
+      buyLifeAction,
     ],
   );
 }

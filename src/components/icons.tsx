@@ -191,6 +191,21 @@ export function SoundIcon({ size, muted }: IconProps & { readonly muted: boolean
   );
 }
 
+/** Сердце — жизнь кампании. */
+export function HeartIcon({ size, filled = true }: IconProps & { readonly filled?: boolean }): ReactElement {
+  return (
+    <Icon size={size}>
+      <path
+        d="M12 20.4l-1.7-1.55C5.6 14.6 2.8 12.05 2.8 8.9 2.8 6.35 4.75 4.4 7.3 4.4c1.44 0 2.82.67 3.7 1.73.88-1.06 2.26-1.73 3.7-1.73 2.55 0 4.5 1.95 4.5 4.5 0 3.15-2.8 5.7-7.5 9.95z"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </Icon>
+  );
+}
+
 /** Стрелка вправо — «перейти на экран». */
 export function ChevronRightIcon({ size }: IconProps): ReactElement {
   return (

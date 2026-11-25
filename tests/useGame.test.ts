@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { cellAt, countSafeCells, getLevelConfig, getMinesForLevel } from '../src/game/board';
-import { PATTERN_LEVELS, patternForLevel, patternMineCount, patternStartCell } from '../src/game/patterns';
+import { PATTERN_LEVELS, patternForLevel, patternMineCount, patternForAttempt, patternStartCell } from '../src/game/patterns';
 import { openCell, WIN_BONUS_COINS } from '../src/game/reveal';
 import { applyHint } from '../src/game/shop';
 import { createInitialState, gameReducer } from '../src/game/useGame';
@@ -29,7 +29,8 @@ function firstHiddenSafeIndex(state: GameState): number {
 describe('useGame: createInitialState', () => {
   it('уровень с фигурой: мины расставлены, стартовая зона открыта', () => {
     const state = createInitialState({ level: 1, seed: 42 });
-    const pattern = patternForLevel(1);
+    // Вариант отражения берётся из зерна партии — сверяемся с тем же зерном.
+    const pattern = patternForAttempt(1, state.seed);
 
     expect(pattern).not.toBeNull();
     if (pattern === null) return;
@@ -168,8 +169,10 @@ describe('useGame: редьюсер', () => {
     });
 
     expect(level7.level).toBe(7);
-    // У 7-го уровня своя фигура («Ракета», 15 мин) — число берётся из неё.
-    expect(level7.config.mines).toBe(15);
+    // У каждого уровня своя фигура — число мин берётся из неё.
+    const pattern = patternForLevel(7);
+    expect(pattern).not.toBeNull();
+    if (pattern !== null) expect(level7.config.mines).toBe(patternMineCount(pattern));
     expect(level7.status).toBe('idle');
     expect(level7.flags).toBe(0);
   });

@@ -110,6 +110,8 @@ describe('progress: сериализация', () => {
       stats: 'stats',
       achievements: 'achievements',
       levelStars: 'levelStars',
+      lives: 'lives',
+      livesAt: 'livesAt',
       daily: 'daily',
       vibration: 'vibration',
       tutorial: 'tutorial',

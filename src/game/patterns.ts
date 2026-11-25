@@ -30,12 +30,69 @@ export interface LevelPattern {
 }
 
 /**
- * Кампания: 16 фигур по возрастанию числа мин.
+ * Готовые фигуры: собираются формулой, а не рисуются руками.
  *
- * Порядок = порядок прохождения. После последней фигуры уровни идут
- * со случайной расстановкой (и растёт число мин).
+ * Геометрические узоры дают много уровней без риска «нечитаемой» картинки,
+ * а стартовая зона вырезается автоматически — вокруг `S` мин не бывает.
  */
-export const LEVEL_PATTERNS: readonly LevelPattern[] = [
+function shape(
+  title: string,
+  mineAt: (row: number, col: number) => boolean,
+  start: readonly [number, number] = [8, 1],
+): LevelPattern {
+  const [startRow, startCol] = start;
+  const rows: string[] = [];
+
+  for (let row = 0; row < PATTERN_ROWS; row += 1) {
+    let line = '';
+    for (let col = 0; col < PATTERN_COLS; col += 1) {
+      const nearStart = Math.abs(row - startRow) <= 1 && Math.abs(col - startCol) <= 1;
+      if (row === startRow && col === startCol) line += START_CHAR;
+      else line += !nearStart && mineAt(row, col) ? MINE_CHAR : EMPTY_CHAR;
+    }
+    rows.push(line);
+  }
+
+  return { title, art: rows };
+}
+
+/** Расстояние до центра поля по Чебышёву (квадратные кольца). */
+const ring = (row: number, col: number): number =>
+  Math.max(Math.abs(row - 4), Math.abs(col - 4));
+
+/** Расстояние до центра по манхэттену (ромбы). */
+const diamond = (row: number, col: number): number =>
+  Math.abs(row - 4) + Math.abs(col - 4);
+
+const GENERATED_PATTERNS: readonly LevelPattern[] = [
+  shape('Рамка', (row, col) => ring(row, col) === 2, [8, 1]),
+  shape('Ромб-кольцо', (row, col) => diamond(row, col) === 3, [8, 1]),
+  shape('Крест-Х', (row, col) => row === col || row + col === PATTERN_COLS - 1, [8, 4]),
+  shape('Волны', (row, col) => (row + col) % 4 === 0, [8, 1]),
+  shape('Полосы', (row) => row % 4 === 1, [8, 4]),
+  shape('Шахматы', (row, col) => (row + col) % 2 === 0 && ring(row, col) <= 2, [8, 1]),
+  shape(
+    'Снежинка',
+    (row, col) =>
+      ring(row, col) <= 2 &&
+      (row === 4 || col === 4 || Math.abs(row - 4) === Math.abs(col - 4)),
+    [8, 1],
+  ),
+  shape('Точки', (row, col) => row % 2 === 1 && col % 2 === 1, [8, 4]),
+  shape('Соты', (row, col) => (row + 2 * col) % 5 === 0, [8, 1]),
+  shape('Уголки', (row, col) => (row <= 1 || row >= 7) && (col <= 1 || col >= 7), [4, 4]),
+  shape('Зигзаг', (row, col) => col === 4 - (row % 4) || col === 4 + (row % 4), [8, 1]),
+  shape('Диагонали', (row, col) => (row - col + PATTERN_ROWS) % 5 === 0, [4, 4]),
+  shape('Косые', (row, col) => (row + col) % 5 === 0, [8, 4]),
+  shape('Квадраты', (row, col) => row % 4 === 0 && col % 4 === 0, [8, 1]),
+  shape('Треугольник', (row, col) => Math.abs(col - 4) === 3 - Math.min(row, 3), [8, 1]),
+  shape('Воронка', (row, col) => Math.abs(col - 4) === Math.min(row, 4), [8, 1]),
+  shape('Штрихи', (row, col) => row % 3 !== 0 && col % 3 === 0, [8, 1]),
+  shape('Лучи', (row, col) => (row === 4 || col === 4) && diamond(row, col) % 2 === 0, [8, 1]),
+];
+
+/** Дорисованные вручную фигуры: животные, предметы, символы. */
+const FIGURES: readonly LevelPattern[] = [
   {
     title: 'Крест',
     art: [
@@ -260,16 +317,194 @@ export const LEVEL_PATTERNS: readonly LevelPattern[] = [
       'S........',
     ],
   },
+  {
+    title: 'Молния',
+    art: [
+      '...##....',
+      '..##.....',
+      '.##......',
+      '...##....',
+      '..##.....',
+      '.##......',
+      '##.......',
+      '.........',
+      '....S....',
+    ],
+  },
+  {
+    title: 'Месяц',
+    art: [
+      '..####...',
+      '.#.......',
+      '#........',
+      '#........',
+      '#........',
+      '.#.......',
+      '..####...',
+      '.........',
+      '....S....',
+    ],
+  },
+  {
+    title: 'Якорь',
+    art: [
+      '....#....',
+      '...#.#...',
+      '....#....',
+      '..#####..',
+      '....#....',
+      '....#....',
+      '.#..#..#.',
+      '..##.##..',
+      'S........',
+    ],
+  },
+  {
+    title: 'Зонт',
+    art: [
+      '...###...',
+      '.#.....#.',
+      '#.......#',
+      '....#....',
+      '....#....',
+      '....#....',
+      '...#.....',
+      '.........',
+      '....S....',
+    ],
+  },
+  {
+    title: 'Гриб',
+    art: [
+      '..#####..',
+      '.#.....#.',
+      '.........',
+      '...###...',
+      '...###...',
+      '.........',
+      '.........',
+      '.........',
+      '....S....',
+    ],
+  },
+  {
+    title: 'Кубок',
+    art: [
+      '..#####..',
+      '.#.....#.',
+      '.#.....#.',
+      '..#...#..',
+      '...#.#...',
+      '....#....',
+      '...###...',
+      '.........',
+      '....S....',
+    ],
+  },
 ];
+
+/**
+ * Порядок кампании.
+ *
+ * Сложность в целом растёт (она равна числу мин в фигуре), но не монотонно:
+ * лёгкие фигуры попадаются и дальше — после тяжёлого уровня нужен передых.
+ * Список задаётся названиями: опечатка падает с понятной ошибкой, а тест
+ * проверяет, что все фигуры использованы ровно по разу.
+ */
+const CAMPAIGN_ORDER: readonly string[] = [
+  // Разминка: 8–14 мин, фигуры читаются с первого взгляда.
+  'Крест', // 9
+  'Квадраты', // 8
+  'Зонт', // 11
+  'Птица', // 11
+  'Лучи', // 9
+  'Стрелка', // 11
+  'Ромб', // 12
+  'Ромб-кольцо', // 12
+  'Треугольник', // 12
+  'Гриб', // 13
+  'Месяц', // 13
+  'Шахматы', // 13
+  'Кораблик', // 13
+  'Точки', // 14
+  // «Спина» кампании: 15 и больше, но с передыхами — после трёх-четырёх
+  // плотных уровней идёт фигура на 14 мин.
+  'Воронка', // 15
+  'Соты', // 15
+  'Зигзаг', // 14 — передых
+  'Косые', // 15
+  'Домик', // 15
+  'Ёлка', // 15
+  'Ракета', // 15
+  'Молния', // 14 — передых
+  'Танк', // 15
+  'Флаг', // 15
+  'Ключ', // 16
+  'Корона', // 14 — передых
+  'Рамка', // 16
+  'Уголки', // 16
+  'Штрихи', // 16
+  'Крест-Х', // 17
+  'Диагонали', // 14 — передых
+  // Финал: самые плотные поля.
+  'Кубок', // 17
+  'Рыбка', // 17
+  'Сердце', // 17
+  'Снежинка', // 17
+  'Кошка', // 18
+  'Полосы', // 18
+  'Череп', // 18
+  'Якорь', // 18
+  'Волны', // 19
+];
+
+/** Все нарисованные и сгенерированные фигуры вместе. */
+export const ALL_PATTERNS: readonly LevelPattern[] = [...FIGURES, ...GENERATED_PATTERNS];
+
+/** Кампания в порядке прохождения. */
+export const LEVEL_PATTERNS: readonly LevelPattern[] = CAMPAIGN_ORDER.map((title) => {
+  const pattern = ALL_PATTERNS.find((item) => item.title === title);
+  if (pattern === undefined) throw new Error(`Фигура «${title}» не найдена`);
+  return pattern;
+});
 
 /** Сколько уровней идут с фигурами. */
 export const PATTERN_LEVELS = LEVEL_PATTERNS.length;
+
+/** Сколько вариантов отражения фигуры. */
+export const PATTERN_VARIANTS = 4;
+
+/**
+ * Отражение/поворот фигуры.
+ *
+ * Нужен против заучивания: после проигрыша поле раскрывается, и при повторной
+ * попытке с той же раскладкой игрок просто знал бы, где мины. Поэтому каждая
+ * попытка получает свой вариант — фигура та же, а расположение другое.
+ * Отражения сохраняют свободную зону вокруг старта, так что проверять ничего
+ * дополнительно не нужно.
+ */
+export function variantPattern(pattern: LevelPattern, variant: number): LevelPattern {
+  const mode = ((Math.trunc(variant) % PATTERN_VARIANTS) + PATTERN_VARIANTS) % PATTERN_VARIANTS;
+  if (mode === 0) return pattern;
+
+  const mirrored = pattern.art.map((row) => [...row].reverse().join(''));
+  if (mode === 1) return { ...pattern, art: mirrored };
+  if (mode === 2) return { ...pattern, art: [...pattern.art].reverse() };
+  return { ...pattern, art: [...mirrored].reverse() };
+}
 
 /** Фигура уровня или `null`, если уровень идёт со случайной расстановкой. */
 export function patternForLevel(level: number): LevelPattern | null {
   if (!Number.isFinite(level)) return null;
   const index = Math.floor(level) - 1;
   return LEVEL_PATTERNS[index] ?? null;
+}
+
+/** Фигура уровня в конкретном варианте отражения. */
+export function patternForAttempt(level: number, seed: number): LevelPattern | null {
+  const pattern = patternForLevel(level);
+  if (pattern === null) return null;
+  return variantPattern(pattern, seed);
 }
 
 /** Символ в позиции арта. */

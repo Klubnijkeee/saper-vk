@@ -8,7 +8,10 @@
  * фолбэк на localStorage).
  */
 
-import bridge from '@vkontakte/vk-bridge';
+import bridge, { type RequestPropsMap } from '@vkontakte/vk-bridge';
+
+/** Методы моста, которые вызываются без параметров (социальный блок). */
+type SimpleMethod = keyof RequestPropsMap;
 
 /** Сколько ждём ответ ВК на VKWebAppInit, прежде чем считать, что мы не в ВК. */
 const INIT_TIMEOUT_MS = 2000;
@@ -117,4 +120,41 @@ export async function storageSet(values: Readonly<Record<string, string>>): Prom
   } catch {
     // тишина: не сохранилось — играем дальше
   }
+}
+
+/**
+ * Действия «социального» блока. Все они доступны только внутри ВКонтакте:
+ * вне его мост молчит, и мы просто сообщаем игроку об этом.
+ *
+ * `true` — ВК принял вызов, `false` — мы не в ВК (или игрок закрыл диалог).
+ */
+async function callBridge(method: SimpleMethod): Promise<boolean> {
+  if (!bridgeReady) return false;
+
+  try {
+    await bridge.send(method, {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Пригласить друзей: стандартный диалог ВК. */
+export function inviteFriends(): Promise<boolean> {
+  return callBridge('VKWebAppShowInviteBox');
+}
+
+/** Добавить приложение в избранное — это влияет на возвраты игроков. */
+export function addToFavorites(): Promise<boolean> {
+  return callBridge('VKWebAppAddToFavorites');
+}
+
+/** Попросить разрешение на уведомления. */
+export function allowNotifications(): Promise<boolean> {
+  return callBridge('VKWebAppAllowNotifications');
+}
+
+/** Поделиться ссылкой на приложение (кнопка «Рассказать друзьям»). */
+export function shareApp(): Promise<boolean> {
+  return callBridge('VKWebAppShare');
 }

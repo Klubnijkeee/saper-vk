@@ -113,6 +113,31 @@ const SCENARIOS = [
     waitMs: 4400,
     storage: { theme: 'classic', level: '14' },
   },
+  // Коллекция фигур: пройденные карточки открыты, остальные закрыты.
+  {
+    name: '46-collection',
+    query: '?screen=collection',
+    waitMs: 1000,
+    storage: { theme: 'classic', level: '9', levelStars: '{"1":3,"2":3,"3":2,"4":2,"5":3,"6":2,"7":1,"8":2}' },
+  },
+  // Друзья и рейтинг: рабочие действия + честное «скоро» про таблицу.
+  { name: '47-social', query: '?screen=social', waitMs: 1000 },
+  // Жизни: две из пяти и идёт отсчёт до следующей.
+  {
+    name: '48-hub-lives',
+    query: '',
+    waitMs: 800,
+    storage: { theme: 'classic', level: '6', lives: '2', livesAt: String(Date.now() - 300_000) },
+  },
+  // Модалка «жизни закончились»: открываем карту и жмём по текущему уровню.
+  // Метка времени — «сейчас»: иначе игра досчитает регенерацию и жизни вернутся.
+  {
+    name: '49-no-lives',
+    query: '?screen=map',
+    waitMs: 1000,
+    storage: { theme: 'classic', level: '6', lives: '0', livesAt: String(Date.now()) },
+    clicks: ['.map-node.is-current'],
+  },
 ];
 
 const DIAGNOSTICS = `(() => {
@@ -240,6 +265,13 @@ for (const scenario of SCENARIOS) {
       if (body !== null) body.scrollTop = body.scrollHeight;
     })()`);
     await sleep(250);
+  }
+
+  // Клики по селекторам — чтобы снять состояния, которые открываются действием
+  // (например, модалку «жизни закончились»).
+  for (const selector of scenario.clicks ?? []) {
+    await evaluate(`document.querySelector(${JSON.stringify(selector)})?.click()`);
+    await sleep(400);
   }
 
   await shoot(scenario.name);

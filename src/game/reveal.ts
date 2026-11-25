@@ -147,18 +147,29 @@ function completeOpening(state: GameState, opening: Opening): GameState {
  * Часы при этом не запускаются (партия ещё `idle`), монеты не начисляются —
  * это подарок уровня, а не ход игрока. Волна раскрытия проигрывается та же,
  * что и при обычном клике.
+ *
+ * Открывается ровно 3×3, без каскада: на разреженных фигурах каскад от старта
+ * мог бы раскрыть всё поле и выиграть уровень одним касанием.
  */
 export function openStartZone(state: GameState, index: number): GameState {
   if (!isValidIndex(index, state.config)) return state;
 
-  const opened = floodFill(state.board, state.config, index);
-  if (opened.size === 0) return state;
+  const startRow = Math.floor(index / state.config.cols);
+  const startCol = index % state.config.cols;
+  const cells: WaveCell[] = [];
 
-  const board = state.board.map((cell) => opened.get(cell.index)?.cell ?? cell);
-  const cells: WaveCell[] = [...opened.entries()].map(([cellIndex, entry]) => ({
-    index: cellIndex,
-    ring: entry.ring,
-  }));
+  const board = state.board.map((cell) => {
+    const inZone = Math.abs(cell.row - startRow) <= 1 && Math.abs(cell.col - startCol) <= 1;
+    if (!inZone || cell.state !== 'hidden') return cell;
+
+    cells.push({
+      index: cell.index,
+      ring: Math.max(Math.abs(cell.row - startRow), Math.abs(cell.col - startCol)),
+    });
+    return { ...cell, state: 'revealed' as CellState };
+  });
+
+  if (cells.length === 0) return state;
 
   const moveId = state.moveId + 1;
   return {
@@ -166,7 +177,7 @@ export function openStartZone(state: GameState, index: number): GameState {
     board,
     status: 'idle',
     minesPlaced: true,
-    openedSafe: state.openedSafe + opened.size,
+    openedSafe: state.openedSafe + cells.length,
     moveId,
     lastEvent: { kind: 'reveal', id: moveId, origin: index, cells },
   };

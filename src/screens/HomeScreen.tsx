@@ -7,11 +7,14 @@
  */
 
 import type { ReactElement } from 'react';
+import { Hearts } from '../components/Hearts';
 import { formatClock } from '../game/clock';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { dailyProgress, dailyTasksFor, dateKey } from '../game/daily';
 import { MODES, configForMode } from '../game/modes';
+import { PATTERN_LEVELS } from '../game/patterns';
 import { bestTimeFor, winRate } from '../game/stats';
+import { useNow } from '../hooks/useNow';
 import type { LevelConfig, MetaState, ModeId, ModeIconId, ScreenId } from '../game/types';
 import {
   ChartIcon,
@@ -40,19 +43,21 @@ const MODE_ICONS: Readonly<Record<ModeIconId, (props: { size?: number }) => Reac
 export interface HomeScreenProps {
   readonly meta: MetaState;
   readonly coins: number;
-  /** «Сейчас» — нужно, чтобы показать набор заданий на сегодня. */
-  readonly now: number;
   readonly onPlay: (mode: ModeId) => void;
   readonly onOpen: (screen: ScreenId) => void;
+  /** Купить жизнь за звёзды. */
+  readonly onBuyLife: () => void;
 }
 
 export function HomeScreen({
   meta,
   coins,
-  now,
   onPlay,
   onOpen,
+  onBuyLife,
 }: HomeScreenProps): ReactElement {
+  // Секундный тик нужен для обратного отсчёта жизней и задач дня.
+  const now = useNow(1000);
   const key = dateKey(now);
   const tasks = dailyTasksFor(key);
   const doneTasks = tasks.filter(
@@ -63,6 +68,7 @@ export function HomeScreen({
   const campaignConfig: LevelConfig = configForMode('campaign', level);
   const campaignRecord = bestTimeFor(meta.stats, 'campaign');
   const levelStars = Object.values(meta.levelStars).reduce((sum, value) => sum + value, 0);
+  const collected = Math.min(Math.max(0, level - 1), PATTERN_LEVELS);
   const freeModes = MODES.filter((mode) => mode.id !== 'campaign');
   const rate = Math.round(winRate(meta.stats) * 100);
 
@@ -84,6 +90,16 @@ export function HomeScreen({
           </span>
         </div>
       </header>
+
+      <div className="hub__lives">
+        <Hearts
+          lives={meta.lives}
+          updatedAt={meta.livesAt}
+          now={now}
+          stars={meta.stars}
+          onBuy={onBuyLife}
+        />
+      </div>
 
       <div className="screen__body hub__body">
         <button type="button" className="hero" onClick={() => onOpen('map')}>
@@ -195,13 +211,6 @@ export function HomeScreen({
             </span>
             <span className="tile__label">Рекорды</span>
           </button>
-          <button type="button" className="tile" onClick={() => onOpen('themes')}>
-            <span className="tile__icon">
-              <PaletteIcon size={22} />
-            </span>
-            <span className="tile__label">Темы</span>
-            <span className="tile__badge">{meta.unlockedThemes.length}</span>
-          </button>
           <button type="button" className="tile" onClick={() => onOpen('achievements')}>
             <span className="tile__icon">
               <StarIcon size={22} />
@@ -211,11 +220,33 @@ export function HomeScreen({
               {unlocked}/{ACHIEVEMENTS.length}
             </span>
           </button>
+          <button type="button" className="tile" onClick={() => onOpen('collection')}>
+            <span className="tile__icon">
+              <SparkIcon size={22} />
+            </span>
+            <span className="tile__label">Коллекция</span>
+            <span className="tile__badge">
+              {collected}/{PATTERN_LEVELS}
+            </span>
+          </button>
+          <button type="button" className="tile" onClick={() => onOpen('themes')}>
+            <span className="tile__icon">
+              <PaletteIcon size={22} />
+            </span>
+            <span className="tile__label">Темы</span>
+            <span className="tile__badge">{meta.unlockedThemes.length}</span>
+          </button>
           <button type="button" className="tile" onClick={() => onOpen('stats')}>
             <span className="tile__icon">
               <ChartIcon size={22} />
             </span>
             <span className="tile__label">Статистика</span>
+          </button>
+          <button type="button" className="tile" onClick={() => onOpen('social')}>
+            <span className="tile__icon">
+              <CrownIcon size={22} />
+            </span>
+            <span className="tile__label">Друзья и рейтинг</span>
           </button>
           <button type="button" className="tile" onClick={() => onOpen('howto')}>
             <span className="tile__icon">

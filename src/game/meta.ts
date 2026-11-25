@@ -7,6 +7,14 @@
 
 import { newAchievements, starsFor } from './achievements';
 import { addMatchToDaily, claimableTasks, dateKey, rollDaily, EMPTY_COUNTERS, EMPTY_DAILY } from './daily';
+import {
+  LIFE_PRICE_STARS,
+  MAX_LIVES,
+  addLives,
+  refreshLives,
+  spendLife,
+  type LivesState,
+} from './lives';
 import { EMPTY_STATS, applyMatch, starsForLevel } from './stats';
 import { DEFAULT_THEME, findTheme, isThemeUnlocked } from './themes';
 import type { MetaState, ModeId, ThemeId } from './types';
@@ -20,10 +28,42 @@ export const EMPTY_META: MetaState = {
   achievements: [],
   campaignLevel: 1,
   levelStars: {},
+  lives: MAX_LIVES,
+  livesAt: 0,
   daily: EMPTY_DAILY,
   vibrationEnabled: true,
   tutorialSeen: false,
 };
+
+/** Жизни в виде отдельного состояния. */
+export function livesOf(meta: MetaState): LivesState {
+  return { lives: meta.lives, updatedAt: meta.livesAt };
+}
+
+/** Пересчитать жизни по времени. Возвращает тот же объект, если менять нечего. */
+export function refreshMetaLives(meta: MetaState, now: number): MetaState {
+  const next = refreshLives(livesOf(meta), now);
+  if (next.lives === meta.lives && next.updatedAt === meta.livesAt) return meta;
+  return { ...meta, lives: next.lives, livesAt: next.updatedAt };
+}
+
+/**
+ * Купить жизнь за звёзды.
+ * Если жизни полны или звёзд не хватает — состояние не меняется.
+ */
+export function buyLife(meta: MetaState, now: number): MetaState {
+  const current = refreshLives(livesOf(meta), now);
+  if (current.lives >= MAX_LIVES) return meta;
+  if (meta.stars < LIFE_PRICE_STARS) return meta;
+
+  const next = addLives(current, 1, now);
+  return {
+    ...meta,
+    stars: meta.stars - LIFE_PRICE_STARS,
+    lives: next.lives,
+    livesAt: next.updatedAt,
+  };
+}
 
 /** Итог партии, который уходит в мета-прогресс. */
 export interface MatchEnd {
@@ -93,11 +133,20 @@ export function applyMatchEnd(meta: MetaState, end: MatchEnd): MetaState {
 
   const unlocked = newAchievements({ stats, level: end.level }, meta.achievements);
   const achievements = [...meta.achievements, ...unlocked.map((item) => item.id)];
+
+  // Жизнь списывается за проигрыш в кампании: свободная игра — тренировка.
+  const lives =
+    end.mode === 'campaign' && !end.won
+      ? spendLife(livesOf(meta), end.now)
+      : refreshLives(livesOf(meta), end.now);
+
   const starred: MetaState = {
     ...meta,
     stats,
     daily,
     achievements,
+    lives: lives.lives,
+    livesAt: lives.updatedAt,
     // Прогресс кампании только растёт: перепройденный старый уровень его не откатит.
     campaignLevel:
       end.mode === 'campaign' && end.won

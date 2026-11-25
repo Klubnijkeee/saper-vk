@@ -7,20 +7,25 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { initAudio } from './audio/sfx';
+import { NoLivesModal } from './components/NoLivesModal';
 import { Toast } from './components/Toast';
 import { DEV_BRIDGE_ENABLED } from './dev';
+import { canSpendLife } from './game/lives';
+import { livesOf } from './game/meta';
 import { isModeId } from './game/modes';
 import { findTheme } from './game/themes';
 import type { ModeId, ScreenId, ThemeId } from './game/types';
 import { useGame } from './game/useGame';
 import { useToast } from './hooks/useToast';
 import { AchievementsScreen } from './screens/AchievementsScreen';
+import { CollectionScreen } from './screens/CollectionScreen';
 import { GameScreen } from './screens/GameScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { HowToPlayScreen } from './screens/HowToPlayScreen';
 import { LevelMapScreen } from './screens/LevelMapScreen';
 import { RecordsScreen } from './screens/RecordsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { SocialScreen } from './screens/SocialScreen';
 import { StatsScreen } from './screens/StatsScreen';
 import { ThemesScreen } from './screens/ThemesScreen';
 import { vkPersistence } from './vk/storage';
@@ -33,11 +38,13 @@ const SCREENS: readonly ScreenId[] = [
   'home',
   'game',
   'map',
+  'collection',
   'stats',
   'achievements',
   'themes',
   'records',
   'settings',
+  'social',
   'howto',
 ];
 
@@ -89,15 +96,25 @@ export default function App(): ReactElement {
     markTutorialSeen,
     setTheme,
     buyTheme,
+    buyLife,
   } = useGame({}, vkPersistence);
   const { toast, showToast } = useToast();
 
   const [screen, setScreen] = useState<ScreenId>(initialScreen);
-  /** Дата для задач дня: обновляем при переходе в меню, чтобы день менялся без перезагрузки. */
-  const [now, setNow] = useState<number>(() => Date.now());
+  /** Модалка «жизни закончились» — показывается вместо старта уровня. */
+  const [noLives, setNoLives] = useState(false);
 
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  /**
+   * Хватает ли жизней на партию. Жизни тратит только кампания:
+   * свободная игра — тренировка без ограничений.
+   */
+  const canPlay = useCallback((mode: ModeId): boolean => {
+    if (mode !== 'campaign') return true;
+    return canSpendLife(livesOf(stateRef.current.meta), Date.now());
+  }, []);
 
   // Отладочный режим: `?mode=professional` открывает большое поле сразу.
   useEffect(() => {
@@ -106,7 +123,6 @@ export default function App(): ReactElement {
   }, [startMode]);
 
   const openScreen = useCallback((next: ScreenId): void => {
-    setNow(Date.now());
     setScreen(next);
   }, []);
 
@@ -132,20 +148,39 @@ export default function App(): ReactElement {
 
   const handlePlay = useCallback(
     (mode: ModeId): void => {
+      if (!canPlay(mode)) {
+        setNoLives(true);
+        return;
+      }
       startMode(mode);
       openScreen('game');
     },
-    [startMode, openScreen],
+    [canPlay, startMode, openScreen],
   );
 
   /** Запуск конкретного уровня кампании с карты (перепрохождение разрешено). */
   const handlePlayLevel = useCallback(
     (level: number): void => {
+      if (!canPlay('campaign')) {
+        setNoLives(true);
+        return;
+      }
       startMode('campaign', level);
       openScreen('game');
     },
-    [startMode, openScreen],
+    [canPlay, startMode, openScreen],
   );
+
+  /** «Заново» после проигрыша — тоже тратит жизнь. */
+  const handleRestart = useCallback((): void => {
+    const current = stateRef.current;
+    const wasLost = current.mode === 'campaign' && current.status === 'lost';
+    if (wasLost && !canPlay('campaign')) {
+      setNoLives(true);
+      return;
+    }
+    reset();
+  }, [canPlay, reset]);
 
   const handleThemeBuy = useCallback(
     (theme: ThemeId): void => {
@@ -166,9 +201,9 @@ export default function App(): ReactElement {
         <HomeScreen
           meta={state.meta}
           coins={state.coins}
-          now={now}
           onPlay={handlePlay}
           onOpen={openScreen}
+          onBuyLife={buyLife}
         />
       ) : null}
 
@@ -178,7 +213,26 @@ export default function App(): ReactElement {
           levelStars={state.meta.levelStars}
           onBack={backHome}
           onPlay={handlePlayLevel}
+          onCollection={() => {
+            openScreen('collection');
+          }}
         />
+      ) : null}
+
+      {screen === 'collection' ? (
+        <CollectionScreen
+          campaignLevel={state.meta.campaignLevel}
+          levelStars={state.meta.levelStars}
+          stats={state.meta.stats}
+          onBack={() => {
+            openScreen('map');
+          }}
+          onPlay={handlePlayLevel}
+        />
+      ) : null}
+
+      {screen === 'social' ? (
+        <SocialScreen meta={state.meta} onBack={backHome} onNotify={showToast} />
       ) : null}
 
       {screen === 'game' ? (
@@ -189,7 +243,7 @@ export default function App(): ReactElement {
           onHint={applyHintAt}
           onPause={pause}
           onResume={resume}
-          onRestart={reset}
+          onRestart={handleRestart}
           onNextLevel={nextLevel}
           onExit={backHome}
           onToggleSound={toggleSound}
@@ -240,6 +294,18 @@ export default function App(): ReactElement {
           onBack={() => {
             markTutorialSeen();
             backHome();
+          }}
+        />
+      ) : null}
+
+      {noLives ? (
+        <NoLivesModal
+          lives={state.meta.lives}
+          updatedAt={state.meta.livesAt}
+          stars={state.meta.stars}
+          onBuy={buyLife}
+          onExit={() => {
+            setNoLives(false);
           }}
         />
       ) : null}

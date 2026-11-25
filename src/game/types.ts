@@ -220,6 +220,10 @@ export interface MetaState {
   readonly campaignLevel: number;
   /** Оценка уровней кампании: номер уровня → 1..3 звезды. */
   readonly levelStars: Readonly<Record<string, number>>;
+  /** Жизни кампании: попытки, которые восстанавливаются со временем. */
+  readonly lives: number;
+  /** Момент, от которого считается регенерация жизней. */
+  readonly livesAt: number;
   readonly daily: DailyState;
   readonly vibrationEnabled: boolean;
   /** Показан ли обучающий экран. */
@@ -231,11 +235,13 @@ export type ScreenId =
   | 'home'
   | 'game'
   | 'map'
+  | 'collection'
   | 'stats'
   | 'achievements'
   | 'themes'
   | 'records'
   | 'settings'
+  | 'social'
   | 'howto';
 
 /**
@@ -340,6 +346,8 @@ export interface StoredProgress {
   readonly stats: Stats;
   readonly achievements: readonly string[];
   readonly levelStars: Readonly<Record<string, number>>;
+  readonly lives: number;
+  readonly livesAt: number;
   readonly daily: DailyState;
   readonly vibrationEnabled: boolean;
   readonly tutorialSeen: boolean;
@@ -375,6 +383,10 @@ export type GameAction =
   | { readonly type: 'MARK_TUTORIAL_SEEN' }
   | { readonly type: 'SET_THEME'; readonly theme: ThemeId }
   | { readonly type: 'BUY_THEME'; readonly theme: ThemeId }
+  /** Пересчитать жизни по времени (регенерация). */
+  | { readonly type: 'TICK_LIVES'; readonly now: number }
+  /** Купить жизнь за звёзды. */
+  | { readonly type: 'BUY_LIFE'; readonly now: number }
   /** Применить прогресс, загруженный из хранилища (`now` — для смены дня). */
   | { readonly type: 'HYDRATE'; readonly progress: Partial<StoredProgress>; readonly now: number }
   | { readonly type: 'RESET' };
