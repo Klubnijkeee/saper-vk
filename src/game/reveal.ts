@@ -7,7 +7,14 @@
  * возвращается **тот же самый объект** состояния, чтобы React не перерисовывал поле.
  */
 
-import { cellAt, countSafeCells, createBoard, isValidIndex, neighborIndices } from './board';
+import {
+  cellAt,
+  countOpenCells,
+  countSafeCells,
+  createBoard,
+  isValidIndex,
+  neighborIndices,
+} from './board';
 import { freezeClock, startClock } from './clock';
 import { applyMatchEnd } from './meta';
 import { createRng } from './random';
@@ -25,7 +32,7 @@ export function remainingMines(state: GameState): number {
 
 /** Сколько безопасных клеток нужно открыть для победы прямо сейчас. */
 export function safeCellsTotal(state: GameState): number {
-  return countSafeCells(state.config, state.minesRemoved);
+  return countSafeCells(state.config, state.minesRemoved, countOpenCells(state.board));
 }
 
 /** Открытая клетка вместе с её расстоянием от точки клика (для волны анимации). */
@@ -47,13 +54,13 @@ export function openCell(state: GameState, index: number, now: number): GameStat
   if (!isValidIndex(index, state.config)) return state;
 
   const cell = cellAt(state.board, index);
-  // Открытая клетка или флажок — ход игнорируется.
-  if (cell.state !== 'hidden') return state;
+  // Пустота вокруг фигуры, открытая клетка или флажок — ход игнорируется.
+  if (cell.blocked || cell.state !== 'hidden') return state;
 
   // Мины ставятся на первом открытии: до этого поле пустое, поэтому клик безопасен.
   const board = state.minesPlaced
     ? state.board
-    : createBoard(state.config, index, createRng(state.seed));
+    : createBoard(state.board, state.config, index, createRng(state.seed));
   const target = cellAt(board, index);
 
   if (target.hasMine) return lose(state, board, index, now);
@@ -86,7 +93,7 @@ export function openSingleCell(state: GameState, index: number, now: number): Ga
   if (!isValidIndex(index, state.config)) return state;
 
   const cell = cellAt(state.board, index);
-  if (cell.state !== 'hidden' || cell.hasMine) return state;
+  if (cell.blocked || cell.state !== 'hidden' || cell.hasMine) return state;
 
   const board = state.board.map((item) =>
     item.index === index ? { ...item, state: 'revealed' as CellState } : item,
@@ -140,56 +147,13 @@ function completeOpening(state: GameState, opening: Opening): GameState {
 }
 
 /**
- * Стартовая зона уровня с фигурой.
- *
- * Мины на таком уровне расставлены заранее, поэтому «первый клик безопасен»
- * обеспечивается иначе: игра сама открывает клетку `S` и её окружение.
- * Часы при этом не запускаются (партия ещё `idle`), монеты не начисляются —
- * это подарок уровня, а не ход игрока. Волна раскрытия проигрывается та же,
- * что и при обычном клике.
- *
- * Открывается ровно 3×3, без каскада: на разреженных фигурах каскад от старта
- * мог бы раскрыть всё поле и выиграть уровень одним касанием.
- */
-export function openStartZone(state: GameState, index: number): GameState {
-  if (!isValidIndex(index, state.config)) return state;
-
-  const startRow = Math.floor(index / state.config.cols);
-  const startCol = index % state.config.cols;
-  const cells: WaveCell[] = [];
-
-  const board = state.board.map((cell) => {
-    const inZone = Math.abs(cell.row - startRow) <= 1 && Math.abs(cell.col - startCol) <= 1;
-    if (!inZone || cell.state !== 'hidden') return cell;
-
-    cells.push({
-      index: cell.index,
-      ring: Math.max(Math.abs(cell.row - startRow), Math.abs(cell.col - startCol)),
-    });
-    return { ...cell, state: 'revealed' as CellState };
-  });
-
-  if (cells.length === 0) return state;
-
-  const moveId = state.moveId + 1;
-  return {
-    ...state,
-    board,
-    status: 'idle',
-    minesPlaced: true,
-    openedSafe: state.openedSafe + cells.length,
-    moveId,
-    lastEvent: { kind: 'reveal', id: moveId, origin: index, cells },
-  };
-}
-
-/**
  * Каскадное открытие: открываем клетку; если у неё нет мин рядом —
  * продолжаем с её соседями.
  *
  * Реализовано итеративно (очередь BFS), а не рекурсией: поведение «рекурсивное»,
  * но стек не растёт. Обход в ширину заодно даёт `ring` — расстояние от точки
- * клика, по которому UI строит волну раскрытия.
+ * клика, по которому UI строит волну раскрытия. Пустота вокруг фигуры каскад
+ * не пропускает: там клеток нет.
  */
 function floodFill(
   board: Board,
@@ -204,9 +168,11 @@ function floodFill(
     if (entry === undefined) continue;
 
     const cell = cellAt(board, entry.index);
-    // Флажки не открываем, уже открытые — пропускаем. Мина в каскад попасть не может:
-    // раскрываемся только от клеток с нулём мин вокруг.
-    if (cell.hasMine || cell.state !== 'hidden' || opened.has(entry.index)) continue;
+    // Пустота, флажки и уже открытые клетки — пропускаем. Мина в каскад попасть
+    // не может: раскрываемся только от клеток с нулём мин вокруг.
+    if (cell.blocked || cell.hasMine || cell.state !== 'hidden' || opened.has(entry.index)) {
+      continue;
+    }
 
     // Открываем клетку: в карту кладём уже новую клетку (state: 'revealed'),
     // иначе поле останется прежним, а монеты и счётчик открытых разойдутся с ним.
@@ -216,7 +182,7 @@ function floodFill(
     for (const neighbor of neighborIndices(entry.index, config)) {
       if (opened.has(neighbor)) continue;
       const neighborCell = cellAt(board, neighbor);
-      if (neighborCell.state === 'hidden' && !neighborCell.hasMine) {
+      if (!neighborCell.blocked && neighborCell.state === 'hidden' && !neighborCell.hasMine) {
         queue.push({ index: neighbor, ring: entry.ring + 1 });
       }
     }
@@ -233,6 +199,8 @@ function floodFill(
 function win(state: GameState, now: number): GameState {
   let flags = 0;
   const board = state.board.map((cell) => {
+    // Пустота вокруг фигуры остаётся как есть: это не клетка поля.
+    if (cell.blocked) return cell;
     if (cell.hasMine) {
       flags += 1;
       return cell.state === 'flagged' ? cell : { ...cell, state: 'flagged' as CellState };
@@ -324,7 +292,7 @@ export function toggleFlag(state: GameState, index: number): GameState {
   if (!isValidIndex(index, state.config)) return state;
 
   const cell = cellAt(state.board, index);
-  if (cell.state === 'revealed') return state;
+  if (cell.blocked || cell.state === 'revealed') return state;
 
   const nextState: CellState = cell.state === 'flagged' ? 'hidden' : 'flagged';
   const board = state.board.map((item) =>

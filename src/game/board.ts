@@ -5,7 +5,6 @@
  * а возвращает новое поле.
  */
 
-import { patternMineCells, type LevelPattern } from './patterns';
 import { shuffle } from './random';
 import type { Board, Cell, CellState, Coord, LevelConfig, Mine, Rng } from './types';
 
@@ -37,9 +36,18 @@ export function countCells(config: LevelConfig): number {
   return config.rows * config.cols;
 }
 
+/** Сколько клеток реально есть на поле: остальное — пустота вокруг фигуры. */
+export function countOpenCells(board: Board): number {
+  return board.reduce((sum, cell) => sum + (cell.blocked ? 0 : 1), 0);
+}
+
 /** Всего безопасных клеток — ровно их нужно открыть для победы. */
-export function countSafeCells(config: LevelConfig, minesRemoved: number = 0): number {
-  return countCells(config) - config.mines + minesRemoved;
+export function countSafeCells(
+  config: LevelConfig,
+  minesRemoved: number = 0,
+  openCells: number = countCells(config),
+): number {
+  return Math.max(0, openCells - config.mines + minesRemoved);
 }
 
 /** Индекс лежит внутри поля? */
@@ -92,13 +100,17 @@ export function cellAt(board: Board, index: number): Cell {
 }
 
 /** Пустое поле: всё закрыто, мин нет, цифры нулевые. */
-export function createEmptyBoard(config: LevelConfig): Board {
+export function createEmptyBoard(
+  config: LevelConfig,
+  mask?: readonly boolean[] | null,
+): Board {
   return Array.from({ length: countCells(config) }, (_unused, index) => {
     const { row, col } = toCoord(index, config);
     return {
       index,
       row,
       col,
+      blocked: mask === null || mask === undefined ? false : mask[index] !== true,
       hasMine: false,
       adjacentMines: 0,
       state: 'hidden',
@@ -107,16 +119,24 @@ export function createEmptyBoard(config: LevelConfig): Board {
   });
 }
 
+/** Индексы клеток, где реально может стоять мина. */
+export function openIndices(board: Board): readonly number[] {
+  return board.reduce<number[]>((list, cell) => {
+    if (!cell.blocked) list.push(cell.index);
+    return list;
+  }, []);
+}
+
 /**
  * Зона, свободная от мин при первой расстановке: сама клетка первого клика
  * плюс её соседи. Тогда первый клик открывает область, а не «цифру 1» —
  * так же ведёт себя классический сапёр.
  *
- * Если мин настолько много, что места не хватает, гарантируем только саму клетку.
+ * Если клеток не хватает (фигура тонкая, мин много), гарантируем только саму клетку.
  */
-function safeZone(config: LevelConfig, safeIndex: number): ReadonlySet<number> {
+function safeZone(board: Board, config: LevelConfig, safeIndex: number): ReadonlySet<number> {
   const zone = new Set<number>([safeIndex, ...neighborIndices(safeIndex, config)]);
-  if (countCells(config) - zone.size < config.mines) {
+  if (countOpenCells(board) - zone.size < config.mines) {
     return new Set<number>([safeIndex]);
   }
   return zone;
@@ -124,7 +144,7 @@ function safeZone(config: LevelConfig, safeIndex: number): ReadonlySet<number> {
 
 /**
  * Расставить мины, гарантированно не задев `safeIndex` и его окружение.
- * Возвращает новое поле.
+ * Возвращает новое поле. Мины встают только там, где есть клетка фигуры.
  */
 export function placeMines(
   board: Board,
@@ -136,8 +156,8 @@ export function placeMines(
     throw new RangeError(`placeMines: safeIndex ${safeIndex} вне поля`);
   }
 
-  const forbidden = safeZone(config, safeIndex);
-  const candidates = allIndices(config).filter((index) => !forbidden.has(index));
+  const forbidden = safeZone(board, config, safeIndex);
+  const candidates = openIndices(board).filter((index) => !forbidden.has(index));
   if (candidates.length < config.mines) {
     throw new Error(
       `placeMines: не хватает клеток под мины (нужно ${config.mines}, доступно ${candidates.length})`,
@@ -166,23 +186,13 @@ export function withAdjacency(board: Board, config: LevelConfig): Board {
  * Полная генерация поля под первый клик: мины + цифры.
  * Мины ставятся после первого клика, поэтому первая клетка всегда безопасна.
  */
-export function createBoard(config: LevelConfig, safeIndex: number, rng: Rng): Board {
-  const withMines = placeMines(createEmptyBoard(config), config, safeIndex, rng);
-  return withAdjacency(withMines, config);
-}
-
-/**
- * Поле уровня кампании: мины расставлены по фигуре, а не случайно.
- *
- * Такое поле полностью определено уровнем — одна и та же фигура при каждом
- * заходе. Безопасность первого хода обеспечивает не расстановка, а стартовая
- * зона: игра сама открывает 3×3 вокруг `S` (см. `openStartZone`).
- */
-export function createPatternBoard(config: LevelConfig, pattern: LevelPattern): Board {
-  const mineIndices = new Set(patternMineCells(pattern, config));
-  const withMines = createEmptyBoard(config).map((cell) =>
-    mineIndices.has(cell.index) ? { ...cell, hasMine: true } : cell,
-  );
+export function createBoard(
+  board: Board,
+  config: LevelConfig,
+  safeIndex: number,
+  rng: Rng,
+): Board {
+  const withMines = placeMines(board, config, safeIndex, rng);
   return withAdjacency(withMines, config);
 }
 

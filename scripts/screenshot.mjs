@@ -93,25 +93,24 @@ const SCENARIOS = [
       levelStars: '{"1":3,"2":3,"3":2,"4":2,"5":1}',
     },
   },
-  // Проигрыш в кампании раскрывает все мины — видно саму фигуру уровня.
-  // Кадр с «подсмотром»: модалка убрана, поле видно целиком.
+  // Фигурные поля: клетки стоят только внутри силуэта.
   {
-    name: '43-shape-cat',
-    query: '?dev=lose-peek',
-    waitMs: 4400,
-    storage: { theme: 'classic', level: '16' },
+    name: '43-shape-fish',
+    query: '?dev=play',
+    waitMs: 2600,
+    storage: { theme: 'classic', level: '39' },
   },
   {
     name: '44-shape-tank',
-    query: '?dev=lose-peek',
-    waitMs: 4400,
-    storage: { theme: 'classic', level: '10' },
+    query: '?dev=play',
+    waitMs: 2600,
+    storage: { theme: 'classic', level: '49' },
   },
   {
-    name: '45-shape-fish',
-    query: '?dev=lose-peek',
-    waitMs: 4400,
-    storage: { theme: 'classic', level: '14' },
+    name: '45-shape-letter',
+    query: '?dev=play',
+    waitMs: 2600,
+    storage: { theme: 'classic', level: '121' },
   },
   // Коллекция фигур: пройденные карточки открыты, остальные закрыты.
   {
@@ -295,7 +294,9 @@ const GAME_URL = `${baseUrl}/?dev=start`;
 async function revealSafeCell() {
   await evaluate(`(() => {
     const state = window.__SAPER__.getState();
-    const cell = state.board.find((item) => !item.hasMine && item.state === 'hidden');
+    const cell = state.board.find(
+      (item) => !item.blocked && !item.hasMine && item.state === 'hidden',
+    );
     if (cell !== undefined) window.__SAPER__.reveal(cell.index);
   })()`);
 }
@@ -345,9 +346,23 @@ check(
 );
 
 // 3. Потратили 100 монет на «Убрать мину» → монеты уменьшились ровно на 100.
+//
+// Фигурные поля меньше классического 9×9, и «дофармить» монеты на маленьком
+// уровне нельзя: он закончится победой. Поэтому переходим на большой уровень
+// (круг 13×13) — монеты за победу уже накоплены и пережили перезагрузку.
+await evaluate(`localStorage.setItem('saper:level', '154')`);
+await openPage(GAME_URL);
 await revealSafeCell();
 await sleep(900);
+// На большом круге можно спокойно добрать монет: до победы тут далеко.
+for (let attempt = 0; attempt < 12; attempt += 1) {
+  const coins = await evaluate('window.__SAPER__.getState().coins');
+  if (coins >= 100) break;
+  await revealSafeCell();
+  await sleep(220);
+}
 const coinsBeforeSpend = await evaluate('window.__SAPER__.getState().coins');
+check(coinsBeforeSpend >= 100, `монет на подсказку не хватает: ${coinsBeforeSpend}`);
 await evaluate("window.__SAPER__.applyHint('remove-mine')");
 await sleep(500);
 const spent = await shoot('19-coins-after-spend');
@@ -364,8 +379,8 @@ check(
   `монеты после траты не пережили перезагрузку: ${spent.state.coins} → ${spendReload.state.coins}`,
 );
 check(
-  spendReload.state.level === winReload.state.level,
-  `уровень изменился без победы: ${spendReload.state.level}`,
+  spendReload.state.level === spent.state.level,
+  `уровень изменился без победы: ${spendReload.state.level} вместо ${spent.state.level}`,
 );
 
 console.log('\nвсе проверки прогресса пройдены');

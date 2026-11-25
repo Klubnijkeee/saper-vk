@@ -54,8 +54,8 @@ declare global {
   }
 }
 
-/** Переменная числа колонок: тип CSSProperties её не знает, поэтому расширяем. */
-type GameStyle = CSSProperties & { readonly '--cols': number };
+/** Переменные числа колонок и строк: тип CSSProperties их не знает. */
+type GameStyle = CSSProperties & { readonly '--cols': number; readonly '--rows': number };
 
 export function GameScreen({
   state,
@@ -183,7 +183,9 @@ export function GameScreen({
         onReveal(40);
         return;
       }
-      const cell = current.board.find((item) => !item.hasMine && item.state === 'hidden');
+      const cell = current.board.find(
+        (item) => !item.blocked && !item.hasMine && item.state === 'hidden',
+      );
       if (cell !== undefined) onReveal(cell.index);
     };
 
@@ -284,7 +286,10 @@ export function GameScreen({
       : 0;
 
   return (
-    <div className="game" style={{ '--cols': modeConfig.cols } as GameStyle}>
+    <div
+      className="game"
+      style={{ '--cols': modeConfig.cols, '--rows': modeConfig.rows } as GameStyle}
+    >
       <TopBar
         modeLabel={modeLabel}
         modeCaption={modeCaption}

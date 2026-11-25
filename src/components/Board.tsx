@@ -101,6 +101,11 @@ export function Board({ state, onReveal, onFlag }: BoardProps): ReactElement {
         }}
       >
         {board.map((cell) => {
+          // Пустота вокруг фигуры: клетки здесь нет — рисуем дырку в поле.
+          if (cell.blocked) {
+            return <span key={cell.index} className="cell cell--void" aria-hidden="true" />;
+          }
+
           const animation = animations.get(cell.index) ?? null;
           return (
             <Cell

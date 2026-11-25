@@ -13,7 +13,7 @@
 import { useCallback, useState, type ReactElement } from 'react';
 import { ScreenShell } from '../components/ScreenShell';
 import { ChevronRightIcon, StarIcon, TrophyIcon } from '../components/icons';
-import { LEVEL_PATTERNS } from '../game/patterns';
+import { LEVEL_SHAPES } from '../game/shapes';
 import { bestTimeFor } from '../game/stats';
 import type { MetaState } from '../game/types';
 import { formatClock } from '../game/clock';
@@ -67,7 +67,7 @@ function ActionRow({
 export function SocialScreen({ meta, onBack, onNotify }: SocialScreenProps): ReactElement {
   const [notificationsAsked, setNotificationsAsked] = useState(false);
   const level = meta.campaignLevel;
-  const collected = Math.min(Math.max(0, level - 1), LEVEL_PATTERNS.length);
+  const collected = Math.min(Math.max(0, level - 1), LEVEL_SHAPES.length);
   const record = bestTimeFor(meta.stats, 'campaign');
 
   /** Общий обработчик: вне ВК методы моста недоступны, говорим об этом прямо. */
@@ -123,7 +123,7 @@ export function SocialScreen({ meta, onBack, onNotify }: SocialScreenProps): Rea
           <span className="row__text">
             <span className="row__label">Уровень кампании</span>
             <span className="row__hint">
-              фигур собрано {collected} из {LEVEL_PATTERNS.length}
+              фигур собрано {collected} из {LEVEL_SHAPES.length}
             </span>
           </span>
           <span className="row__value">{level}</span>

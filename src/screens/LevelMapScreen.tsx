@@ -2,21 +2,25 @@
  * Карта кампании.
  *
  * Уровни идут змеевиком, как тропа; вокруг — трава, камни и звёзды, чтобы карта
- * не выглядела пустой. В узле показывается силуэт фигуры — но только у пройденных
- * уровней: иначе фигура была бы подсказкой перед партией.
+ * не выглядела пустой. В узле показывается силуэт поля-фигуры — но только
+ * у пройденных уровней: у текущего и будущих стоит замок или вопрос.
  */
 
 import type { ReactElement } from 'react';
-import { PatternPreview } from '../components/PatternPreview';
 import { ScreenShell } from '../components/ScreenShell';
+import { ShapePreview } from '../components/ShapePreview';
 import { Stars } from '../components/Stars';
 import { LockIcon, QuestionIcon } from '../components/icons';
 import { formatClock } from '../game/clock';
 import {
-  LEVEL_PATTERNS,
-  PATTERN_LEVELS,
-  patternMineCount,
-} from '../game/patterns';
+  LEVEL_SHAPES,
+  SHAPE_LEVEL_COUNT,
+  shapeCols,
+  shapeMask,
+  shapeMines,
+  shapeRows,
+  type LevelShape,
+} from '../game/shapes';
 import { parTimeMs } from '../game/stats';
 
 /** Шаг между узлами по вертикали, px. */
@@ -44,7 +48,7 @@ interface MapNode {
   readonly y: number;
   readonly title: string;
   readonly mines: number;
-  readonly art: readonly string[] | null;
+  readonly shape: LevelShape | null;
 }
 
 /** Украшение вдоль тропы. */
@@ -61,19 +65,19 @@ const DECOR_KINDS = ['tree', 'rock', 'star'] as const;
  * выглядит одинаково и не зависит от размеров экрана.
  */
 function buildNodes(): readonly MapNode[] {
-  const total = PATTERN_LEVELS + 1;
+  const total = SHAPE_LEVEL_COUNT + 1;
   const nodes: MapNode[] = [];
 
   for (let index = 0; index < total; index += 1) {
     const level = index + 1;
-    const pattern = LEVEL_PATTERNS[index];
+    const shape = LEVEL_SHAPES[index] ?? null;
     nodes.push({
       level,
       x: MAP_WIDTH / 2 + Math.sin(index * 0.85) * (MAP_WIDTH * 0.26),
       y: TOP_PAD + index * NODE_SPACING,
-      title: pattern?.title ?? 'Дальше',
-      mines: pattern === undefined ? 15 : patternMineCount(pattern),
-      art: pattern?.art ?? null,
+      title: shape?.title ?? 'Дальше',
+      mines: shape === null ? 15 : shapeMines(shape),
+      shape,
     });
   }
 
@@ -137,14 +141,14 @@ export function LevelMapScreen({
   onCollection,
 }: LevelMapScreenProps): ReactElement {
   const doneStars = Object.values(levelStars).reduce((sum, value) => sum + value, 0);
-  const collected = Math.min(campaignLevel - 1, PATTERN_LEVELS);
+  const collected = Math.min(Math.max(0, campaignLevel - 1), SHAPE_LEVEL_COUNT);
   const currentIndex = NODES.findIndex((node) => node.level === campaignLevel);
   const splitAt = currentIndex < 0 ? NODES.length : currentIndex + 1;
 
   return (
     <ScreenShell
       title="Прохождение"
-      subtitle={`Уровень ${campaignLevel} из ${PATTERN_LEVELS} · звёзд за уровни: ${doneStars}`}
+      subtitle={`Уровень ${campaignLevel} из ${SHAPE_LEVEL_COUNT} · звёзд за уровни: ${doneStars}`}
       onBack={onBack}
     >
       <button type="button" className="map__collection" onClick={onCollection}>
@@ -154,7 +158,7 @@ export function LevelMapScreen({
         <span className="map__collection-text">
           <span className="map__collection-title">Коллекция фигур</span>
           <span className="map__collection-meta">
-            собрано {Math.max(0, collected)} из {PATTERN_LEVELS}
+            собрано {collected} из {SHAPE_LEVEL_COUNT}
           </span>
         </span>
       </button>
@@ -162,7 +166,7 @@ export function LevelMapScreen({
       <div className="progress progress--big" aria-hidden="true">
         <span
           className="progress__fill"
-          style={{ width: `${(Math.max(0, collected) / PATTERN_LEVELS) * 100}%` }}
+          style={{ width: `${(collected / SHAPE_LEVEL_COUNT) * 100}%` }}
         />
       </div>
 
@@ -209,12 +213,14 @@ export function LevelMapScreen({
               }
             >
               <span className="map-node__disc">
-                {node.art === null || done ? (
-                  node.art === null ? (
-                    <span className="map-node__endless">∞</span>
-                  ) : (
-                    <PatternPreview art={node.art} />
-                  )
+                {node.shape === null ? (
+                  <span className="map-node__endless">∞</span>
+                ) : done ? (
+                  <ShapePreview
+                    mask={shapeMask(node.shape)}
+                    rows={shapeRows(node.shape)}
+                    cols={shapeCols(node.shape)}
+                  />
                 ) : current ? (
                   <QuestionIcon size={22} />
                 ) : (
@@ -222,10 +228,12 @@ export function LevelMapScreen({
                 )}
               </span>
               <span className="map-node__label">
-                {node.level === PATTERN_LEVELS + 1 ? 'Дальше' : `${node.level}. ${node.title}`}
+                {node.shape === null
+                  ? 'Дальше'
+                  : `${node.level}. ${node.title}`}
               </span>
               <span className="map-node__meta">
-                {node.art === null ? 'без фигуры' : `${node.mines} мин`}
+                {node.shape === null ? 'без фигуры' : `${node.mines} мин`}
                 {current ? ` · ${formatClock(parTimeMs(node.mines))}` : ''}
               </span>
               <Stars earned={earned} size={13} />
@@ -235,10 +243,10 @@ export function LevelMapScreen({
       </div>
 
       <p className="note">
-        Фигуры — это расстановка мин: пройдёшь уровень, и увидишь её в коллекции. Первый ход
-        всегда безопасен: игра сразу открывает стартовую зону 3×3. Три звезды дают за победу
-        без подсказок и в пределах времени на узле. После последней фигуры кампания
-        продолжается случайными полями.
+        Поле уровня — это и есть фигура: клетки стоят только внутри силуэта. Первый ход
+        всегда безопасен, а мины расставляются заново при каждой попытке, поэтому заучить
+        раскладку нельзя. Три звезды дают за победу без подсказок и в пределах времени
+        на узле. После последней фигуры кампания продолжается случайными полями.
       </p>
     </ScreenShell>
   );

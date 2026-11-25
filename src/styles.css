@@ -31,6 +31,7 @@
    * нельзя — она застыла бы на девяти колонках.
    */
   --cols: 9;
+  --rows: 9;
   --app-width: min(100vw, 480px);
   --statusbar-text: #b0b0b0;
 
@@ -307,6 +308,15 @@ button {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+/* Пустота вокруг фигуры: клетки здесь нет, поэтому и рамки нет. */
+.cell--void {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .cell:active:not(:disabled) {
@@ -914,10 +924,16 @@ button {
  * и обе наследуют посчитанные значения.
  */
 .game {
-  --cell-size: clamp(
-    15px,
-    calc((var(--app-width) - 2 * var(--board-pad) - (var(--cols) - 1) * var(--board-gap)) / var(--cols)),
-    34px
+  --cell-size: max(
+    13px,
+    min(
+      clamp(
+        15px,
+        calc((var(--app-width) - 2 * var(--board-pad) - (var(--cols) - 1) * var(--board-gap)) / var(--cols)),
+        34px
+      ),
+      calc((100dvh - 210px) / var(--rows))
+    )
   );
   --board-width: calc(var(--cols) * var(--cell-size) + (var(--cols) - 1) * var(--board-gap));
 }

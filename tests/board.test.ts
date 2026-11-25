@@ -49,7 +49,7 @@ describe('board: первый клик всегда безопасен', () => {
   it('100 генераций — первая клетка и её окружение без мин', () => {
     for (let seed = 1; seed <= 100; seed += 1) {
       const firstClick = (seed * 7) % countCells(CONFIG);
-      const board = createBoard(CONFIG, firstClick, createRng(seed));
+      const board = createBoard(createEmptyBoard(CONFIG), CONFIG, firstClick, createRng(seed));
 
       expect(cellAt(board, firstClick).hasMine, `seed=${seed}, клик=${firstClick}`).toBe(false);
       for (const neighbor of neighborIndices(firstClick, CONFIG)) {
@@ -61,7 +61,7 @@ describe('board: первый клик всегда безопасен', () => {
 
   it('безопасен для любого из 81 вариантов первого клика', () => {
     for (let firstClick = 0; firstClick < countCells(CONFIG); firstClick += 1) {
-      const board = createBoard(CONFIG, firstClick, createRng(1000 + firstClick));
+      const board = createBoard(createEmptyBoard(CONFIG), CONFIG, firstClick, createRng(1000 + firstClick));
       expect(cellAt(board, firstClick).hasMine, `клик=${firstClick}`).toBe(false);
       expect(cellAt(board, firstClick).adjacentMines, `клик=${firstClick}`).toBe(0);
     }
@@ -74,7 +74,7 @@ describe('board: первый клик всегда безопасен', () => {
     const corners = [0, hard.cols - 1, countCells(hard) - hard.cols, countCells(hard) - 1];
     for (const corner of corners) {
       for (let seed = 1; seed <= 40; seed += 1) {
-        const board = createBoard(hard, corner, createRng(seed));
+        const board = createBoard(createEmptyBoard(hard), hard, corner, createRng(seed));
         expect(cellAt(board, corner).hasMine, `угол=${corner}, seed=${seed}`).toBe(false);
         expect(minesOf(board)).toHaveLength(hard.mines);
       }
@@ -85,7 +85,7 @@ describe('board: первый клик всегда безопасен', () => {
 describe('board: мины и цифры', () => {
   it('ставит ровно нужное количество мин', () => {
     for (let seed = 1; seed <= 30; seed += 1) {
-      const board = createBoard(CONFIG, 40, createRng(seed));
+      const board = createBoard(createEmptyBoard(CONFIG), CONFIG, 40, createRng(seed));
       expect(minesOf(board)).toHaveLength(CONFIG.mines);
       expect(board.filter((cell) => cell.hasMine)).toHaveLength(CONFIG.mines);
     }
@@ -93,7 +93,7 @@ describe('board: мины и цифры', () => {
 
   it('цифра = количество мин среди 8 соседей', () => {
     for (let seed = 1; seed <= 20; seed += 1) {
-      const board = createBoard(CONFIG, 40, createRng(seed));
+      const board = createBoard(createEmptyBoard(CONFIG), CONFIG, 40, createRng(seed));
       for (const cell of board) {
         expect(cell.adjacentMines, `клетка ${cell.index}, seed=${seed}`).toBe(
           referenceAdjacency(board, CONFIG, cell.index),
@@ -103,11 +103,11 @@ describe('board: мины и цифры', () => {
   });
 
   it('одно зерно даёт одно и то же поле (воспроизводимость)', () => {
-    const first = createBoard(CONFIG, 40, createRng(777));
-    const second = createBoard(CONFIG, 40, createRng(777));
+    const first = createBoard(createEmptyBoard(CONFIG), CONFIG, 40, createRng(777));
+    const second = createBoard(createEmptyBoard(CONFIG), CONFIG, 40, createRng(777));
     expect(second).toEqual(first);
 
-    const other = createBoard(CONFIG, 40, createRng(778));
+    const other = createBoard(createEmptyBoard(CONFIG), CONFIG, 40, createRng(778));
     expect(other).not.toEqual(first);
   });
 });

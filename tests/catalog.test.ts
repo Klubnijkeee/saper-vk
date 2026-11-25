@@ -5,29 +5,27 @@
 import { describe, expect, it } from 'vitest';
 import { getLevelConfig } from '../src/game/board';
 import { FREE_CONFIGS, FREE_MODES, MODES, configForMode, findMode, isCampaign } from '../src/game/modes';
-import { PATTERN_LEVELS, patternForLevel, patternMineCount } from '../src/game/patterns';
+import { LEVEL_SHAPES, SHAPE_LEVEL_COUNT, shapeCols, shapeMines, shapeRows } from '../src/game/shapes';
 import { DEFAULT_THEME, THEMES, findTheme, isThemeUnlocked, lockedThemes } from '../src/game/themes';
 import type { ModeId } from '../src/game/types';
 
 describe('modes: режимы игры', () => {
   it('кампания идёт первой и получает поле по уровню', () => {
-    // Уровень с фигурой берёт число мин из фигуры, уровень без фигуры — из тарифа.
-    expect(configForMode('campaign', PATTERN_LEVELS + 1)).toEqual(
-      getLevelConfig(PATTERN_LEVELS + 1),
+    // Уровень с фигурой берёт размеры и мины из силуэта, уровень без фигуры — из тарифа.
+    expect(configForMode('campaign', SHAPE_LEVEL_COUNT + 1)).toEqual(
+      getLevelConfig(SHAPE_LEVEL_COUNT + 1),
     );
     expect(isCampaign('campaign')).toBe(true);
     expect(isCampaign('novice')).toBe(false);
   });
 
-  it('уровень с фигурой получает столько мин, сколько нарисовано', () => {
-    for (let level = 1; level <= PATTERN_LEVELS; level += 1) {
-      const pattern = patternForLevel(level);
-      if (pattern === null) continue;
-      const config = configForMode('campaign', level);
-      expect(config.mines, `уровень ${level}`).toBe(patternMineCount(pattern));
-      expect(config.rows).toBe(9);
-      expect(config.cols).toBe(9);
-    }
+  it('поле уровня-фигуры совпадает с её силуэтом', () => {
+    LEVEL_SHAPES.forEach((shape, index) => {
+      const config = configForMode('campaign', index + 1);
+      expect(config.rows, `уровень ${index + 1}`).toBe(shapeRows(shape));
+      expect(config.cols, `уровень ${index + 1}`).toBe(shapeCols(shape));
+      expect(config.mines, `уровень ${index + 1}`).toBe(shapeMines(shape));
+    });
   });
 
   it('свободная игра: классические поля и число мин', () => {

@@ -12,7 +12,7 @@ import { formatClock } from '../game/clock';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { dailyProgress, dailyTasksFor, dateKey } from '../game/daily';
 import { MODES, configForMode } from '../game/modes';
-import { PATTERN_LEVELS } from '../game/patterns';
+import { SHAPE_LEVEL_COUNT } from '../game/shapes';
 import { bestTimeFor, winRate } from '../game/stats';
 import { useNow } from '../hooks/useNow';
 import type { LevelConfig, MetaState, ModeId, ModeIconId, ScreenId } from '../game/types';
@@ -68,7 +68,7 @@ export function HomeScreen({
   const campaignConfig: LevelConfig = configForMode('campaign', level);
   const campaignRecord = bestTimeFor(meta.stats, 'campaign');
   const levelStars = Object.values(meta.levelStars).reduce((sum, value) => sum + value, 0);
-  const collected = Math.min(Math.max(0, level - 1), PATTERN_LEVELS);
+  const collected = Math.min(Math.max(0, level - 1), SHAPE_LEVEL_COUNT);
   const freeModes = MODES.filter((mode) => mode.id !== 'campaign');
   const rate = Math.round(winRate(meta.stats) * 100);
 
@@ -226,7 +226,7 @@ export function HomeScreen({
             </span>
             <span className="tile__label">Коллекция</span>
             <span className="tile__badge">
-              {collected}/{PATTERN_LEVELS}
+              {collected}/{SHAPE_LEVEL_COUNT}
             </span>
           </button>
           <button type="button" className="tile" onClick={() => onOpen('themes')}>

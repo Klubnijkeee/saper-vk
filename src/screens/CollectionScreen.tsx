@@ -1,18 +1,26 @@
 /**
  * Коллекция фигур: карточки пройденных уровней.
  *
- * Показывается только то, что игрок уже открыл: силуэт фигуры, название,
- * оценка и лучшее время. Закрытые уровни — карточки-заглушки со знаком вопроса,
- * чтобы было видно, сколько ещё осталось собрать.
+ * Показывается силуэт поля — то, что игрок уже открыл: фигура, оценка и номер
+ * уровня. Закрытые уровни — карточки-заглушки, чтобы было видно, сколько
+ * фигур ещё осталось.
  */
 
 import type { ReactElement } from 'react';
-import { PatternPreview } from '../components/PatternPreview';
 import { ScreenShell } from '../components/ScreenShell';
+import { ShapePreview } from '../components/ShapePreview';
 import { Stars } from '../components/Stars';
 import { LockIcon, QuestionIcon } from '../components/icons';
 import { formatClock } from '../game/clock';
-import { LEVEL_PATTERNS, patternMineCount } from '../game/patterns';
+import {
+  LEVEL_SHAPES,
+  SHAPE_LEVEL_COUNT,
+  shapeCols,
+  shapeMask,
+  shapeMines,
+  shapeRows,
+  type LevelShape,
+} from '../game/shapes';
 import { bestTimeFor } from '../game/stats';
 import type { Stats } from '../game/types';
 
@@ -24,6 +32,17 @@ export interface CollectionScreenProps {
   readonly onPlay: (level: number) => void;
 }
 
+/** Карточка-превью фигуры. */
+function ShapeArt({ shape }: { readonly shape: LevelShape }): ReactElement {
+  return (
+    <ShapePreview
+      mask={shapeMask(shape)}
+      rows={shapeRows(shape)}
+      cols={shapeCols(shape)}
+    />
+  );
+}
+
 export function CollectionScreen({
   campaignLevel,
   levelStars,
@@ -31,27 +50,30 @@ export function CollectionScreen({
   onBack,
   onPlay,
 }: CollectionScreenProps): ReactElement {
-  const total = LEVEL_PATTERNS.length;
-  const collected = LEVEL_PATTERNS.filter((_unused, index) => index + 1 < campaignLevel).length;
+  const collected = Math.min(Math.max(0, campaignLevel - 1), SHAPE_LEVEL_COUNT);
   const bestTime = bestTimeFor(stats, 'campaign');
 
   return (
     <ScreenShell
       title="Коллекция"
-      subtitle={`Собрано ${collected} из ${total}`}
+      subtitle={`Собрано ${collected} из ${SHAPE_LEVEL_COUNT}`}
       onBack={onBack}
     >
       <div className="progress progress--big" aria-hidden="true">
-        <span className="progress__fill" style={{ width: `${(collected / total) * 100}%` }} />
+        <span
+          className="progress__fill"
+          style={{ width: `${(collected / SHAPE_LEVEL_COUNT) * 100}%` }}
+        />
       </div>
       <p className="note">
-        Каждая фигура открывается, когда уровень пройден. Оценка показывает, насколько
-        чисто он взят: три звезды — без подсказок и в пределах времени узла.
+        Каждый уровень — поле в форме фигуры. Собранные открыты целиком, у остальных
+        виден только замок. Оценка показывает, насколько чисто взят уровень: три звезды —
+        без подсказок и в пределах времени узла.
         {bestTime === null ? '' : ` Лучшее время кампании — ${formatClock(bestTime)}.`}
       </p>
 
       <ul className="collection">
-        {LEVEL_PATTERNS.map((pattern, index) => {
+        {LEVEL_SHAPES.map((shape, index) => {
           const level = index + 1;
           const done = level < campaignLevel;
           const current = level === campaignLevel;
@@ -59,7 +81,7 @@ export function CollectionScreen({
           const state = done ? 'done' : current ? 'current' : 'locked';
 
           return (
-            <li key={pattern.title} className={`card is-${state}`}>
+            <li key={shape.title} className={`card is-${state}`}>
               <button
                 type="button"
                 className="card__pick"
@@ -70,16 +92,16 @@ export function CollectionScreen({
               >
                 <span className="card__art">
                   {done ? (
-                    <PatternPreview art={pattern.art} />
+                    <ShapeArt shape={shape} />
                   ) : current ? (
                     <QuestionIcon size={22} />
                   ) : (
                     <LockIcon size={18} />
                   )}
                 </span>
-                <span className="card__title">{pattern.title}</span>
+                <span className="card__title">{shape.title}</span>
                 <span className="card__meta">
-                  {level}. {patternMineCount(pattern)} мин
+                  {level}. {shapeMines(shape)} мин
                 </span>
                 <Stars earned={earned} size={12} />
               </button>

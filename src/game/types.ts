@@ -32,6 +32,11 @@ export interface Cell {
   readonly index: number;
   readonly row: number;
   readonly col: number;
+  /**
+   * Клетки здесь нет: позиция вне фигуры уровня. Такие ячейки не открываются,
+   * не помечаются флажком, не считаются в победе и никогда не содержат мину.
+   */
+  readonly blocked: boolean;
   readonly hasMine: boolean;
   /** Сколько мин среди 8 соседних клеток (0..8). */
   readonly adjacentMines: number;

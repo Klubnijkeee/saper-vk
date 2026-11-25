@@ -62,20 +62,20 @@ export function isShopAvailable(state: GameState): boolean {
   return state.status === 'playing' && !state.paused;
 }
 
-/** Клетки, подходящие под подсказку. */
+/** Клетки, подходящие под подсказку. Пустота вокруг фигуры не считается. */
 export function hintTargets(state: GameState, id: ShopItemId): readonly number[] {
   const { board } = state;
 
   if (id === 'show-mine') {
     // Только закрытые мины: подсвечивать уже помеченную флажком нечего.
-    return indicesWhere(board, (cell) => cell.hasMine && cell.state === 'hidden');
+    return indicesWhere(board, (cell) => !cell.blocked && cell.hasMine && cell.state === 'hidden');
   }
   if (id === 'open-cell') {
     // Флажки не трогаем: игрок сам решил, что там мина.
-    return indicesWhere(board, (cell) => !cell.hasMine && cell.state === 'hidden');
+    return indicesWhere(board, (cell) => !cell.blocked && !cell.hasMine && cell.state === 'hidden');
   }
   // «Убрать мину» — любая мина, даже помеченная флажком.
-  return indicesWhere(board, (cell) => cell.hasMine);
+  return indicesWhere(board, (cell) => !cell.blocked && cell.hasMine);
 }
 
 /** Есть ли на поле цель для подсказки (если нет — показываем тост и не списываем монеты). */

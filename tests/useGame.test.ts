@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { cellAt, countSafeCells, getLevelConfig, getMinesForLevel } from '../src/game/board';
-import { PATTERN_LEVELS, patternForLevel, patternMineCount, patternForAttempt, patternStartCell } from '../src/game/patterns';
+import { SHAPE_LEVEL_COUNT, shapeArea, shapeCols, shapeForLevel, shapeMines, shapeRows } from '../src/game/shapes';
 import { openCell, WIN_BONUS_COINS } from '../src/game/reveal';
 import { applyHint } from '../src/game/shop';
 import { createInitialState, gameReducer } from '../src/game/useGame';
@@ -19,42 +19,50 @@ function playingState(seed = 42, bestTime: number | null = null): GameState {
   return openCell(classicState({ seed, bestTime }), CENTER, T0);
 }
 
-/** Первая закрытая безопасная клетка. */
+/** Первая закрытая безопасная клетка (пустота вокруг фигуры не считается). */
 function firstHiddenSafeIndex(state: GameState): number {
-  const cell = state.board.find((item) => item.state === 'hidden' && !item.hasMine);
+  const cell = state.board.find(
+    (item) => !item.blocked && item.state === 'hidden' && !item.hasMine,
+  );
   if (cell === undefined) throw new Error('нет закрытой безопасной клетки');
   return cell.index;
 }
 
 describe('useGame: createInitialState', () => {
-  it('уровень с фигурой: мины расставлены, стартовая зона открыта', () => {
+  it('поле уровня-фигуры: клетки только внутри силуэта, мин пока нет', () => {
     const state = createInitialState({ level: 1, seed: 42 });
-    // Вариант отражения берётся из зерна партии — сверяемся с тем же зерном.
-    const pattern = patternForAttempt(1, state.seed);
+    const shape = shapeForLevel(1);
 
-    expect(pattern).not.toBeNull();
-    if (pattern === null) return;
+    expect(shape).not.toBeNull();
+    if (shape === null) return;
 
     expect(state.level).toBe(1);
-    expect(state.minesPlaced).toBe(true);
     expect(state.status).toBe('idle');
-    expect(state.clock).toEqual({ startedAt: null, elapsedMs: 0 });
-    // Число мин берётся из фигуры, иначе победа была бы недостижимой.
-    expect(state.config.mines).toBe(patternMineCount(pattern));
-    expect(state.board.filter((cell) => cell.hasMine)).toHaveLength(patternMineCount(pattern));
-    // Стартовая зона уже открыта, а вокруг неё нет мин.
-    expect(state.openedSafe).toBeGreaterThan(0);
-    const start = patternStartCell(pattern, state.config);
-    expect(cellAt(state.board, start).state).toBe('revealed');
+    // Мины расставляются первым кликом: до него поле пустое и безопасное.
+    expect(state.minesPlaced).toBe(false);
+    expect(state.board.some((cell) => cell.hasMine)).toBe(false);
+    // Размеры поля — это размеры силуэта, а не 9×9.
+    expect(state.config.rows).toBe(shapeRows(shape));
+    expect(state.config.cols).toBe(shapeCols(shape));
+    expect(state.config.mines).toBe(shapeMines(shape));
+    expect(state.board.filter((cell) => !cell.blocked)).toHaveLength(shapeArea(shape));
+    // Вне силуэта клеток нет: там пустота, и клик по ней ничего не делает.
+    const voidCell = state.board.find((cell) => cell.blocked);
+    expect(voidCell).toBeDefined();
+    if (voidCell !== undefined) {
+      expect(gameReducer(state, { type: 'REVEAL', index: voidCell.index, now: T0 })).toBe(state);
+      expect(gameReducer(state, { type: 'TOGGLE_FLAG', index: voidCell.index })).toBe(state);
+    }
   });
 
-  it('уровень без фигуры: поле пустое, статус idle', () => {
+  it('уровень без фигуры: обычное поле 9×9', () => {
     const state = classicState({ seed: 42 });
 
     expect(state.level).toBe(CLASSIC_LEVEL);
-    expect(state.level).toBeGreaterThan(PATTERN_LEVELS);
+    expect(state.level).toBeGreaterThan(SHAPE_LEVEL_COUNT);
     expect(state.config).toEqual(getLevelConfig(CLASSIC_LEVEL));
     expect(state.board).toHaveLength(81);
+    expect(state.board.every((cell) => !cell.blocked)).toBe(true);
     expect(state.status).toBe('idle');
     expect(state.minesPlaced).toBe(false);
     expect(state.openedSafe).toBe(0);
@@ -86,18 +94,26 @@ describe('useGame: createInitialState', () => {
     expect(state.level).toBe(9);
   });
 
-  it('сложность растёт вместе с уровнем', () => {
+  it('сложность классических уровней растёт вместе с уровнем', () => {
     const mines = [1, 5, 6, 10, 11, 30].map((level) => getMinesForLevel(level));
     expect(mines).toEqual([10, 10, 12, 12, 15, 15]);
     expect(countSafeCells(getLevelConfig(11))).toBe(66);
   });
 
-  it('у каждого уровня с фигурой число мин берётся из фигуры', () => {
-    for (let level = 1; level <= PATTERN_LEVELS; level += 1) {
-      const pattern = patternForLevel(level);
-      expect(pattern).not.toBeNull();
-      if (pattern === null) continue;
-      expect(createInitialState({ level }).config.mines).toBe(patternMineCount(pattern));
+  it('у каждого уровня-фигуры поле повторяет силуэт', () => {
+    for (let level = 1; level <= SHAPE_LEVEL_COUNT; level += 1) {
+      const shape = shapeForLevel(level);
+      expect(shape).not.toBeNull();
+      if (shape === null) continue;
+
+      const state = createInitialState({ level });
+      expect(state.config.mines, `уровень ${level}`).toBe(shapeMines(shape));
+      expect(state.config.rows, `уровень ${level}`).toBe(shapeRows(shape));
+      expect(state.config.cols, `уровень ${level}`).toBe(shapeCols(shape));
+      expect(state.board.filter((cell) => !cell.blocked), `уровень ${level}`).toHaveLength(
+        shapeArea(shape),
+      );
+      expect(state.board.some((cell) => cell.hasMine), `уровень ${level}`).toBe(false);
     }
   });
 });
@@ -114,18 +130,15 @@ describe('useGame: редьюсер', () => {
     expect(next.moveId).toBe(1);
   });
 
-  it('на уровне с фигурой мины уже стоят, а стартовая зона открыта', () => {
+  it('на уровне с фигурой клетки стоят только внутри силуэта', () => {
     const state = createInitialState({ level: 1, seed: 42 });
 
-    expect(state.minesPlaced).toBe(true);
-    expect(state.openedSafe).toBeGreaterThan(0);
-    // Ход по клетке внутри фигуры — это взрыв: безопасность даёт только стартовая зона.
-    const mine = state.board.find((cell) => cell.hasMine && cell.state === 'hidden');
-    expect(mine).toBeDefined();
-    if (mine === undefined) return;
+    expect(state.board.some((cell) => cell.blocked)).toBe(true);
+    // До первого клика мин нет — они расставляются по клику, как в классике.
+    expect(state.minesPlaced).toBe(false);
 
-    const boom = gameReducer(state, { type: 'REVEAL', index: mine.index, now: T0 });
-    expect(boom.status).toBe('lost');
+    const mine = state.board.find((cell) => cell.hasMine);
+    expect(mine).toBeUndefined();
   });
 
   it('TOGGLE_FLAG меняет счётчик флажков и увеличивает moveId', () => {
@@ -170,9 +183,9 @@ describe('useGame: редьюсер', () => {
 
     expect(level7.level).toBe(7);
     // У каждого уровня своя фигура — число мин берётся из неё.
-    const pattern = patternForLevel(7);
-    expect(pattern).not.toBeNull();
-    if (pattern !== null) expect(level7.config.mines).toBe(patternMineCount(pattern));
+    const shape7 = shapeForLevel(7);
+    expect(shape7).not.toBeNull();
+    if (shape7 !== null) expect(level7.config.mines).toBe(shapeMines(shape7));
     expect(level7.status).toBe('idle');
     expect(level7.flags).toBe(0);
   });

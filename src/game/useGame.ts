@@ -12,14 +12,14 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { playExplosion, playHint, playPuff, playReveal, playWin } from '../audio/sfx';
-import { createEmptyBoard, createPatternBoard, normalizeLevel } from './board';
+import { createEmptyBoard, normalizeLevel } from './board';
 import { freezeClock, isClockRunning, resetClock, startClock, tickClock } from './clock';
 import { buyLife, buyTheme, refreshMetaLives, rollDailyIfNeeded, setTheme, EMPTY_META } from './meta';
 import { configForMode } from './modes';
-import { patternForAttempt, patternStartCell } from './patterns';
 import { isSameProgress, progressOf } from './progress';
 import { createSeed } from './random';
-import { openCell, openStartZone, toggleFlag } from './reveal';
+import { openCell, toggleFlag } from './reveal';
+import { shapeForLevel, shapeMask } from './shapes';
 import { applyHint } from './shop';
 import type {
   GameAction,
@@ -70,13 +70,12 @@ export function createInitialState(options: GameOptions = {}): GameState {
   const config = configForMode(mode, level);
   const seed = (options.seed ?? createSeed()) >>> 0;
   /**
-   * Уровни кампании с фигурой приходят с готовой расстановкой мин:
-   * фигура должна уцелеть, поэтому «первый клик безопасен» обеспечивает
-   * стартовая зона, а не расстановка после клика. Вариант отражения берётся
-   * из зерна партии: после проигрыша поле раскрыто, и та же раскладка во второй
-   * попытке была бы подсказкой.
+   * Поле уровня кампании — это силуэт фигуры: клетки стоят только там, где
+   * нарисован `#`. Мины расставляются внутри фигуры после первого клика,
+   * поэтому первый ход безопасен, а раскладка каждый раз новая.
    */
-  const pattern = mode === 'campaign' ? patternForAttempt(level, seed) : null;
+  const shape = mode === 'campaign' ? shapeForLevel(level) : null;
+  const mask = shape === null ? null : shapeMask(shape);
 
   // Явно указанный уровень кампании — это и есть достигнутый прогресс:
   // держим мету согласованной, иначе сохранение откатило бы игрока назад.
@@ -85,13 +84,13 @@ export function createInitialState(options: GameOptions = {}): GameState {
       ? { ...base, campaignLevel: level }
       : base;
 
-  const state: GameState = {
+  return {
     mode,
     level,
     config,
-    board: pattern === null ? createEmptyBoard(config) : createPatternBoard(config, pattern),
+    board: createEmptyBoard(config, mask),
     status: 'idle',
-    minesPlaced: pattern !== null,
+    minesPlaced: false,
     openedSafe: 0,
     flags: 0,
     explodedIndex: null,
@@ -111,9 +110,6 @@ export function createInitialState(options: GameOptions = {}): GameState {
     hintsUsed: 0,
     meta,
   };
-
-  if (pattern === null) return state;
-  return openStartZone(state, patternStartCell(pattern, config));
 }
 
 /** Новая партия с сохранением мета-прогресса (монеты, рекорд, звёзды, статистика). */
